@@ -19,15 +19,28 @@ async fn main() {
 	}
 }
 
+async fn read_handshake_packet(mut packet: Packet) -> Result<(usize, String, u16, usize), ProtocolError> {
+	if packet.id() != 0x00 { return Err(ProtocolError::ReadError)}
+	Ok((
+		packet.read_usize_varint().await?,
+		packet.read_string().await?,
+		packet.read_unsigned_short().await?,
+		packet.read_usize_varint().await?
+	))
+}
+
 async fn handle_connection(stream: TcpStream, addr: SocketAddr) {
 	let mut conn = MinecraftConnection::new(stream);
-	println!("Подключение: {}", addr);
-	loop {
-		let Ok(mut packet) = conn.read_packet().await else {break;};
-		let Ok(x) = packet.read_bytes(packet.len()).await else {
-			println!("X"); break;
-		};
-		println!("{}", String::from_utf8_lossy(&x));
+
+	let Ok(packet) = conn.read_packet().await else {return;};
+	let Ok((pv, host, port, ns)) = read_handshake_packet(packet).await else {return;};
+
+	if ns == 2 {
+		println!("\nПодключение: {}", addr);
+		println!("Версия протокола: {pv}");
+		println!("Хост: {host}");
+		println!("Порт: {port}");
 	}
+
 	conn.close().await;
 }
