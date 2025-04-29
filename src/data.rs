@@ -29,8 +29,8 @@ impl Packet {
 
 
 pub struct Socket {
-	stream: TcpStream,
-	addr: SocketAddr
+	pub stream: TcpStream,
+	pub addr: SocketAddr
 }
 
 impl Socket {
