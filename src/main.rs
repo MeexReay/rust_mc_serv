@@ -1,36 +1,64 @@
-use std::{io::{Read, Write}, net::TcpListener, thread, time::Duration};
+use std::{env::args, io::{Read, Write}, net::TcpListener, path::PathBuf, sync::Arc, thread, time::Duration};
 
+use config::ServerConfig;
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
 
 use data::{ServerError, TextComponent};
 use pohuy::Pohuy;
 
-pub mod pohuy;
+pub mod config;
 pub mod data;
-
-// Сделать настройку хоста через конфиг
-pub const HOST: &str = "127.0.0.1:25565"; 
+pub mod pohuy; 
 
 fn main() {
-	let Ok(server) = TcpListener::bind(HOST) else {
-	 	println!("Не удалось забиндить сервер на {}", HOST); 
+	// Получение аргументов
+	let exec = args().next().expect("Неизвестная система");
+	let args = args().skip(1).collect::<Vec<String>>();
+
+	if args.len() > 1 {
+		println!("Использование: {exec} [путь до файла конфигурации]"); 
+		return;
+	}
+
+	// Берем путь из аргумента либо по дефолту берем "./server.toml"
+	let config_path = PathBuf::from(args.get(0).unwrap_or(&"server.toml".to_string()));
+
+	// Чтение конфига, если ошибка - выводим
+	let config = match ServerConfig::load_from_file(config_path) {
+		Some(config) => config,
+		None => {
+			println!("Ошибка чтения конфигурации");
+			return;
+		},
+	};
+
+	// Делаем немутабельную потокобезопасную ссылку на конфиг
+	// Впринципе можно и просто клонировать сам конфиг в каждый сука поток ебать того рот ебать блять
+	// но мы этого делать не будем чтобы не было мемори лик лишнего
+	let config = Arc::new(config);
+
+	// Биндим сервер где надо
+	let Ok(server) = TcpListener::bind(&config.host) else {
+	 	println!("Не удалось забиндить сервер на {}", &config.host); 
 		return;
 	};
 
-	println!("Сервер запущен на {}", HOST); 
+	println!("Сервер запущен на {}", &config.host); 
 
 	while let Ok((stream, addr)) = server.accept() {
+		let config = config.clone();
+
 		thread::spawn(move || { 
 			println!("Подключение: {}", addr);
 
 			// Установка таймаутов на чтение и запись
 			// По умолчанию пусть будет 5 секунд, надо будет сделать настройку через конфиг
-			stream.set_read_timeout(Some(Duration::from_secs(5))).pohuy();
-			stream.set_write_timeout(Some(Duration::from_secs(5))).pohuy();
+			stream.set_read_timeout(Some(Duration::from_secs(config.timeout))).pohuy();
+			stream.set_write_timeout(Some(Duration::from_secs(config.timeout))).pohuy();
 
 			// Обработка подключения
 			// Если ошибка -> выводим
-			match handle_connection(MinecraftConnection::new(&stream)) {
+			match handle_connection(config, MinecraftConnection::new(&stream)) {
 				Ok(_) => {},
 				Err(error) => {
 					println!("Ошибка подключения: {error:?}");
@@ -43,6 +71,7 @@ fn main() {
 }
 
 fn handle_connection(
+	_: Arc<ServerConfig>, // Конфиг сервера (возможно будет использоаться в будущем)
 	mut conn: MinecraftConnection<impl Read + Write> // Подключение
 ) -> Result<(), ServerError> {
 	// Чтение рукопожатия
