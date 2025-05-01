@@ -1,12 +1,15 @@
-use std::{net::{SocketAddr, TcpStream}, sync::{Arc, RwLock, RwLockWriteGuard}};
+use std::{hash::Hash, net::{SocketAddr, TcpStream}, sync::{Arc, RwLock, RwLockWriteGuard}};
 
+use dashmap::DashMap;
 use itertools::Itertools;
 use rust_mc_proto::{MinecraftConnection, Packet};
+use uuid::Uuid;
 
 use crate::{config::Config, data::ServerError, player::{ClientInfo, Handshake, PlayerInfo}};
 
 pub struct ServerContext {
     pub config: Arc<Config>,
+    pub clients: DashMap<SocketAddr, Arc<ClientContext>>,
     listeners: Vec<Box<dyn Listener>>,
     handlers: Vec<Box<dyn PacketHandler>>
 }
@@ -16,8 +19,42 @@ impl ServerContext {
         ServerContext {
             config,
             listeners: Vec::new(),
-            handlers: Vec::new()
+            handlers: Vec::new(),
+            clients: DashMap::new()
         }
+    }
+
+    pub fn get_player_by_uuid(self: &Arc<Self>, uuid: Uuid) -> Option<Arc<ClientContext>> {
+        self.clients.iter()
+            .find(|o| {
+                let info = o.player_info();
+                if let Some(info) = info {
+                    info.uuid == uuid
+                } else {
+                    false
+                }
+            })
+            .map(|o| o.clone())
+    }
+
+    pub fn get_player_by_name(self: &Arc<Self>, name: &str) -> Option<Arc<ClientContext>> {
+        self.clients.iter()
+            .find(|o| {
+                let info = o.player_info();
+                if let Some(info) = info {
+                    info.name == name
+                } else {
+                    false
+                }
+            })
+            .map(|o| o.clone())
+    }
+
+    pub fn players(self: &Arc<Self>) -> Vec<Arc<ClientContext>> {
+        self.clients.iter()
+            .filter(|o| o.player_info().is_some())
+            .map(|o| o.clone())
+            .collect()
     }
 
     pub fn add_packet_handler(&mut self, handler: Box<dyn PacketHandler>) {
@@ -59,6 +96,21 @@ pub struct ClientContext {
     pub client_info: RwLock<Option<ClientInfo>>,
     pub player_info: RwLock<Option<PlayerInfo>>
 }
+
+impl PartialEq for ClientContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.addr == other.addr
+    }
+}
+
+impl Hash for ClientContext {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.addr.hash(state);
+    }
+}
+
+impl Eq for ClientContext {}
+
 
 impl ClientContext {
     pub fn new(

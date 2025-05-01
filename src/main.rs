@@ -144,16 +144,20 @@ fn main() {
 
 			// Создаем контекст клиента
 			// Передавется во все листенеры и хандлеры чтобы определять именно этот клиент
-			let client = Arc::new(ClientContext::new(server, conn));
+			let client = Arc::new(ClientContext::new(server.clone(), conn));
+
+			server.clients.insert(client.addr, client.clone());
 
 			// Обработка подключения
 			// Если ошибка -> выводим
-			match handle_connection(client) {
+			match handle_connection(client.clone()) {
 				Ok(_) => {},
 				Err(error) => {
 					error!("Ошибка подключения: {error:?}");
 				},
 			};
+
+			server.clients.remove(&client.addr);
 
 			info!("Отключение: {}", addr);
 		});
