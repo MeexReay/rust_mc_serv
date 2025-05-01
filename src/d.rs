@@ -34,3 +34,12 @@ impl Buffer {
 	}
 }
 
+pub trait Sas {
+	fn ts(&mut self);
+}
+
+impl Sas for Buffer {
+	fn ts(&mut self) {
+		self.index += 1;
+	}
+}

@@ -6,11 +6,11 @@ use d::*;
 
 use std::thread;
 
+
+
 fn main() {
-	let a = Buffer::new(vec![0x01,0xFF,0x33], 0);
-	let b = a;
-	let x = a.read(1);
-	let x2 = a.read(1);
+	let mut a = Buffer::new(vec![0x01,0xFF,0x33], 0);
+	a.ts();
 
 	// let Ok(server) = Server::new("127.0.0.1:25565") else {
 	// 	println!("Не удалось забиндить сервер"); return;
