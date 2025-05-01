@@ -13,8 +13,8 @@ pub struct ServerConfig {
     #[serde(default = "default_timeout")] pub timeout: u64,
 }
 
-fn default_host() -> String { return "127.0.0.1:25565".to_string(); }
-fn default_timeout() -> u64 { return 5; }
+fn default_host() -> String { "127.0.0.1:25565".to_string() }
+fn default_timeout() -> u64 { 5 }
 
 impl ServerConfig {
     pub fn load_from_file(path: PathBuf) -> Option<ServerConfig> {

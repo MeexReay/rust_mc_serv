@@ -137,13 +137,13 @@ impl TextComponentBuilder {
         }
     }
 
-    pub fn text(mut self, text: String) -> Self {
-        self.text = text;
+    pub fn text(mut self, text: &str) -> Self {
+        self.text = text.to_string();
         self
     }
 
-    pub fn color(mut self, color: String) -> Self {
-        self.color = Some(color);
+    pub fn color(mut self, color: &str) -> Self {
+        self.color = Some(color.to_string());
         self
     }
 

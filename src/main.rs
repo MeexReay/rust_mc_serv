@@ -1,6 +1,7 @@
 use std::{env::args, io::{Read, Write}, net::TcpListener, path::PathBuf, sync::Arc, thread, time::Duration};
 
 use config::ServerConfig;
+use context::{ClientContext, Listener, PacketHandler, ServerContext};
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
 
 use data::{ServerError, TextComponent};
@@ -8,7 +9,71 @@ use pohuy::Pohuy;
 
 pub mod config;
 pub mod data;
+pub mod context;
 pub mod pohuy; 
+
+
+struct ExampleListener;
+
+impl Listener for ExampleListener {
+	fn on_status(&self, client: Arc<ClientContext>, response: &mut String) -> Result<(), ServerError> {
+		*response = format!(
+			"{{
+				\"version\": {{
+					\"name\": \"idk\",
+					\"protocol\": {}
+				}},
+				\"players\": {{
+					\"max\": 100,
+					\"online\": 42,
+					\"sample\": [
+						{{
+							\"name\": \"Жопа\",
+							\"id\": \"00000000-0000-0000-0000-000000000000\"
+						}}
+					]
+				}},
+				\"description\": {},
+				\"favicon\": \"data:image/png;base64,<data>\",
+				\"enforcesSecureChat\": false
+			}}",
+			client.protocol_version(),
+			TextComponent::builder()
+				.text("Hello World! ")
+				.extra(vec![
+					TextComponent::builder()
+						.text("Protocol: ")
+						.color("gold")
+						.extra(vec![
+							TextComponent::builder()
+								.text(&client.protocol_version().to_string())
+								.underlined(true)
+								.build()
+						])	
+						.build(),
+					TextComponent::builder()
+						.text("\nServer Addr: ")
+						.color("green")
+						.extra(vec![
+							TextComponent::builder()
+								.text(&format!("{}:{}", client.server_address(), client.server_port()))
+								.underlined(true)
+								.build()
+						])	
+						.build()
+				])
+				.build()
+				.to_string()?
+		);
+
+		Ok(())
+	}
+}
+
+struct ExamplePacketHandler;
+
+impl PacketHandler for ExamplePacketHandler {}
+
 
 fn main() {
 	// Получение аргументов
@@ -37,28 +102,45 @@ fn main() {
 	// но мы этого делать не будем чтобы не было мемори лик лишнего
 	let config = Arc::new(config);
 
+	// Создаем контекст сервера
+	// Передается во все подключения
+	let mut server = ServerContext::new(config);
+
+	server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
+	server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера
+
+	// Бетонируем сервер контекст от изменений
+	let server = Arc::new(server);
+
 	// Биндим сервер где надо
-	let Ok(server) = TcpListener::bind(&config.host) else {
-	 	println!("Не удалось забиндить сервер на {}", &config.host); 
+	let Ok(listener) = TcpListener::bind(&server.config.host) else {
+	 	println!("Не удалось забиндить сервер на {}", &server.config.host); 
 		return;
 	};
 
-	println!("Сервер запущен на {}", &config.host); 
+	println!("Сервер запущен на {}", &server.config.host); 
 
-	while let Ok((stream, addr)) = server.accept() {
-		let config = config.clone();
+	while let Ok((stream, addr)) = listener.accept() {
+		let server = server.clone();
 
 		thread::spawn(move || { 
 			println!("Подключение: {}", addr);
 
 			// Установка таймаутов на чтение и запись
 			// По умолчанию пусть будет 5 секунд, надо будет сделать настройку через конфиг
-			stream.set_read_timeout(Some(Duration::from_secs(config.timeout))).pohuy();
-			stream.set_write_timeout(Some(Duration::from_secs(config.timeout))).pohuy();
+			stream.set_read_timeout(Some(Duration::from_secs(server.config.timeout))).pohuy();
+			stream.set_write_timeout(Some(Duration::from_secs(server.config.timeout))).pohuy();
+
+			// Оборачиваем стрим в майнкрафт конекшн лично для нашего удовольствия
+			let conn = MinecraftConnection::new(stream);
+
+			// Создаем контекст клиента
+			// Передавется во все листенеры и хандлеры чтобы определять именно этот клиент
+			let client = Arc::new(ClientContext::new(server, conn));
 
 			// Обработка подключения
 			// Если ошибка -> выводим
-			match handle_connection(config, MinecraftConnection::new(&stream)) {
+			match handle_connection(client) {
 				Ok(_) => {},
 				Err(error) => {
 					println!("Ошибка подключения: {error:?}");
@@ -71,11 +153,13 @@ fn main() {
 }
 
 fn handle_connection(
-	_: Arc<ServerConfig>, // Конфиг сервера (возможно будет использоаться в будущем)
-	mut conn: MinecraftConnection<impl Read + Write> // Подключение
+	client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
 	// Чтение рукопожатия
-	let mut packet = conn.read_packet()?;
+	// Получение пакетов производится через client.conn(), 
+	// ВАЖНО: не помещать сам client.conn() в переменные, 
+	// он должен сразу убиваться иначе соединение гдето задедлочится
+	let mut packet = client.conn().read_packet()?;
 
 	if packet.id() != 0x00 { 
 		return Err(ServerError::UnknownPacket(format!("Неизвестный пакет рукопожатия"))); 
@@ -86,56 +170,41 @@ fn handle_connection(
 	let server_port = packet.read_unsigned_short()?; // Все тоже самое что и с адресом сервера и все потому же и за тем же
 	let next_state = packet.read_varint()?; // Тип подключения: 1 для получения статуса и пинга, 2 и 3 для обычного подключения
 
+	client.handshake(protocol_version, server_address, server_port);
+
 	match next_state {
 		1 => { // Тип подключения - статус
 			loop {
 				// Чтение запроса
-				let packet = conn.read_packet()?;
+				let packet = client.conn().read_packet()?;
 
 				match packet.id() {
 					0x00 => { // Запрос статуса
 						let mut packet = Packet::empty(0x00);
 
+						// Дефолтный статус
+						let mut status = "{
+							\"version\": {
+								\"name\": \"Error\",
+								\"protocol\": 0
+							},
+							\"description\": {\"text\": \"Internal server error\"}
+						}".to_string();
+
+						// Опрос всех листенеров
+						for listener in client.server.listeners( // Цикл по листенерам
+							|o| o.on_status_priority() // Сортировка по приоритетности
+						).iter() {
+							listener.on_status(client.clone(), &mut status)?; // Вызов метода листенера
+						}
+
 						// Отправка статуса
-						// В будущем это надо будет переделать чтобы это отправлялось через Listener'ы а не самим ядром сервера
-						// Хотя можно сделать и дефолтное значение через конфиг
-						packet.write_string(&format!(
-							// Пример статуса
-							"{{
-								\"version\": {{
-									\"name\": \"1.21.5\",
-									\"protocol\": {protocol_version}
-								}},
-								\"players\": {{
-									\"max\": 100,
-									\"online\": 5,
-									\"sample\": [
-										{{
-											\"name\": \"thinkofdeath\",
-											\"id\": \"4566e69f-c907-48ee-8d71-d7ba5aa00d20\"
-										}}
-									]
-								}},
-								\"description\": {},
-								\"favicon\": \"data:image/png;base64,<data>\",
-								\"enforcesSecureChat\": false
-							}}",
+						packet.write_string(&status)?;
 
-							// В MOTD пихаем дебаг инфу
-							TextComponent::builder()
-								.text(format!("pv: {protocol_version}, sp: {server_port}\nsa: {server_address}"))
-								.color("red".to_string())
-								.bold(true)
-								.italic(true)
-								.underlined(true)
-								.build()
-								.to_string()?
-						))?;
-
-						conn.write_packet(&packet)?;
+						client.conn().write_packet(&packet)?;
 					},
 					0x01 => { // Пинг
-						conn.write_packet(&packet)?; 
+						client.conn().write_packet(&packet)?; 
 						// Просто отправляем этот же пакет обратно
 						// ID такой-же, содержание тоже, так почему бы и нет?
 					},
@@ -151,13 +220,13 @@ fn handle_connection(
 			let mut packet = Packet::empty(0x00);
 
 			packet.write_string(&TextComponent::builder()
-				.text(format!("This server is in developement!!"))
-				.color("gold".to_string())
+				.text("This server is in developement!!")
+				.color("gold")
 				.bold(true)
 				.build()
 				.to_string()?)?;
 
-			conn.write_packet(&packet)?;
+			client.conn().write_packet(&packet)?;
 
 			// TODO: Чтение Configuration (возможно с примешиванием Listener'ов)
 			// TODO: Обработчик пакетов Play (тоже трейт), который уже будет дергать Listener'ы
