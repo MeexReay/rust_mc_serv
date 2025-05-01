@@ -6,11 +6,16 @@ use d::*;
 
 use std::thread;
 
-
+fn get_byte_size(i: i32) -> u8 {
+	for j in 1..4 {
+		if (i & -1 << (j * 7)) == 0 {
+			return j;
+		}
+	}; return 5;
+}
 
 fn main() {
-	let mut a = Buffer::new(vec![0x01,0xFF,0x33], 0);
-	a.ts();
+	println!("{}", get_byte_size(-2147483648));
 
 	// let Ok(server) = Server::new("127.0.0.1:25565") else {
 	// 	println!("Не удалось забиндить сервер"); return;
