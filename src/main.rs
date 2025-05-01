@@ -1,7 +1,9 @@
-use std::{error::Error, io::{Read, Write}, net::TcpListener, thread, time::Duration};
+use std::{io::{Read, Write}, net::TcpListener, thread, time::Duration};
 
-use pohuy::Pohuy;
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
+
+use data::ServerError;
+use pohuy::Pohuy;
 
 pub mod pohuy;
 pub mod data;
@@ -37,11 +39,13 @@ fn main() {
 
 fn handle_connection(
 	mut conn: MinecraftConnection<impl Read + Write> // Подключение
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), ServerError> {
 	// Чтение рукопожатия
 	let mut packet = conn.read_packet()?;
 
-	if packet.id() != 0x00 { return Ok(()); } // Айди пакета не рукопожатное - выходим из функции
+	if packet.id() != 0x00 { 
+		return Err(ServerError::UnknownPacket(format!("Неизвестный пакет рукопожатия"))); 
+	} // Айди пакета не рукопожатное - выходим из функции
 
 	let protocol_version = packet.read_varint()?; // Получаем версия протокола, может быть отрицательным если наш клиент дэбил
 	let server_address = packet.read_string()?; // Получаем домен/адрес сервера к которому пытается подключиться клиент, например "play.example.com", а не айпи
@@ -92,7 +96,7 @@ fn handle_connection(
 						// ID такой-же, содержание тоже, так почему бы и нет?
 					},
 					_ => { 
-						break; 
+						return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при чтении запросов статуса"))); 
 					}
 				}
 			}
@@ -107,7 +111,9 @@ fn handle_connection(
 			// TODO: Чтение Configuration (возможно с примешиванием Listener'ов)
 			// TODO: Обработчик пакетов Play (тоже трейт), который уже будет дергать Listener'ы
 		},
-		_ => {} // Тип подключения не рукопожатный
+		_ => {
+			return Err(ServerError::UnknownPacket(format!("Неизвестный NextState при рукопожатии"))); 
+		} // Тип подключения не рукопожатный
 	}
 
 	Ok(())
