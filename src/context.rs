@@ -163,12 +163,48 @@ pub trait Listener: Sync + Send {
 
 pub trait PacketHandler: Sync + Send {
     fn on_incoming_packet_priority(&self) -> i8 { 0 }
-    fn on_incoming_packet(&self, _: Arc<ClientContext>, _: &mut Packet) -> Result<(), ServerError> { Ok(()) }
+    fn on_incoming_packet(&self, _: Arc<ClientContext>, _: &mut Packet, _: ConnectionState) -> Result<(), ServerError> { Ok(()) }
 
     fn on_outcoming_packet_priority(&self) -> i8 { 0 }
-    fn on_outcoming_packet(&self, _: Arc<ClientContext>, _: &mut Packet) -> Result<(), ServerError> { Ok(()) }
+    fn on_outcoming_packet(&self, _: Arc<ClientContext>, _: &mut Packet, _: ConnectionState) -> Result<(), ServerError> { Ok(()) }
 }
 
-pub struct Player {
+#[derive(Debug)]
+pub enum ConnectionState {
+    Handshake,
+    Status,
+    Login,
+    Configuration,
+    Play
+}
 
+
+#[macro_export]
+macro_rules! call_handlers {
+    ($packet:expr, $client:ident, $state:ident, incoming) => { 
+        {
+            use crate::context::ConnectionState;
+            let mut packet = $packet;
+            for handler in $client.server.packet_handlers(
+                |o| o.on_incoming_packet_priority()
+            ).iter() {
+                handler.on_incoming_packet($client.clone(), &mut packet, ConnectionState::$state)?;
+            }
+            packet.get_mut().set_position(0);
+            packet
+        }
+    };
+    ($packet:expr, $client:ident, $state:ident, outcoming) => { 
+        {
+            use crate::context::ConnectionState;
+            let mut packet = $packet;
+            for handler in $client.server.packet_handlers(
+                |o| o.on_outcoming_packet_priority()
+            ).iter() {
+                handler.on_outcoming_packet($client.clone(), &mut packet, ConnectionState::$state)?;
+            }
+            packet.get_mut().set_position(0);
+            packet
+        }
+    };
 }

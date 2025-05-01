@@ -1,7 +1,7 @@
 use std::{env::args, io::Read, net::TcpListener, path::PathBuf, sync::Arc, thread, time::Duration};
 
 use config::Config;
-use context::{ClientContext, Listener, PacketHandler, ServerContext};
+use context::{ClientContext, ConnectionState, Listener, PacketHandler, ServerContext};
 use log::{debug, error, info};
 use player::{ClientInfo, Handshake, PlayerInfo};
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
@@ -78,7 +78,29 @@ impl Listener for ExampleListener {
 
 struct ExamplePacketHandler;
 
-impl PacketHandler for ExamplePacketHandler {}
+impl PacketHandler for ExamplePacketHandler {
+	fn on_incoming_packet(
+		&self, 
+		client: Arc<ClientContext>, 
+		packet: &mut Packet, 
+		state: ConnectionState
+	) -> Result<(), ServerError> {
+		debug!("{} -> S\t| 0x{:02x}\t| {:?}\t| {} bytes", client.addr.clone(), packet.id(), state, packet.len());
+
+		Ok(())
+	}
+
+	fn on_outcoming_packet(
+		&self, 
+		client: Arc<ClientContext>, 
+		packet: &mut Packet, 
+		state: ConnectionState
+	) -> Result<(), ServerError> {
+		debug!("{} <- S\t| 0x{:02x}\t| {:?}\t| {} bytes", client.addr.clone(), packet.id(), state, packet.len());
+
+		Ok(())
+	}
+}
 
 
 fn main() {
@@ -152,6 +174,7 @@ fn main() {
 			// Если ошибка -> выводим
 			match handle_connection(client.clone()) {
 				Ok(_) => {},
+				Err(ServerError::ConnectionClosed) => {},
 				Err(error) => {
 					error!("Ошибка подключения: {error:?}");
 				},
@@ -171,7 +194,7 @@ fn handle_connection(
 	// Получение пакетов производится через client.conn(), 
 	// ВАЖНО: не помещать сам client.conn() в переменные, 
 	// он должен сразу убиваться иначе соединение гдето задедлочится
-	let mut packet = client.conn().read_packet()?;
+	let mut packet = call_handlers!(client.conn().read_packet()?, client, Handshake, incoming);
 
 	if packet.id() != 0x00 { 
 		return Err(ServerError::UnknownPacket(format!("Неизвестный пакет рукопожатия"))); 
@@ -182,10 +205,10 @@ fn handle_connection(
 	let server_port = packet.read_unsigned_short()?; // Все тоже самое что и с адресом сервера и все потому же и за тем же
 	let next_state = packet.read_varint()?; // Тип подключения: 1 для получения статуса и пинга, 2 и 3 для обычного подключения
 
-	debug!("protocol_version: {protocol_version}");
-	debug!("server_address: {server_address}");
-	debug!("server_port: {server_port}");
-	debug!("next_state: {next_state}");
+	// debug!("protocol_version: {protocol_version}");
+	// debug!("server_address: {server_address}");
+	// debug!("server_port: {server_port}");
+	// debug!("next_state: {next_state}");
 
 	client.set_handshake(Handshake { protocol_version, server_address, server_port });
 
@@ -193,7 +216,7 @@ fn handle_connection(
 		1 => { // Тип подключения - статус
 			loop {
 				// Чтение запроса
-				let packet = client.conn().read_packet()?;
+				let packet = call_handlers!(client.conn().read_packet()?, client, Status, incoming);
 
 				match packet.id() {
 					0x00 => { // Запрос статуса
@@ -218,10 +241,10 @@ fn handle_connection(
 						// Отправка статуса
 						packet.write_string(&status)?;
 
-						client.conn().write_packet(&packet)?;
+						client.conn().write_packet(&call_handlers!(packet, client, Status, outcoming))?;
 					},
 					0x01 => { // Пинг
-						client.conn().write_packet(&packet)?; 
+						client.conn().write_packet(&call_handlers!(packet, client, Status, outcoming))?; 
 						// Просто отправляем этот же пакет обратно
 						// ID такой-же, содержание тоже, так почему бы и нет?
 					},
@@ -235,13 +258,13 @@ fn handle_connection(
 			// Мы находимся в режиме Login
 
 			// Читаем пакет Login Start
-			let mut packet = client.conn().read_packet()?;
+			let mut packet = call_handlers!(client.conn().read_packet()?, client, Login, incoming);
 
 			let name = packet.read_string()?;
 			let uuid = packet.read_uuid()?;
 
-			debug!("name: {name}");
-			debug!("uuid: {uuid}");
+			// debug!("name: {name}");
+			// debug!("uuid: {uuid}");
 
 			client.set_player_info(PlayerInfo { name: name.clone(), uuid: uuid.clone() });
 
@@ -251,18 +274,18 @@ fn handle_connection(
 
 			// Отправляем пакет Set Compression если сжатие указано
 			if let Some(threshold) = client.server.config.server.compression_threshold {
-				client.conn().write_packet(&Packet::build(0x03, |p| p.write_usize_varint(threshold))?)?;
+				client.conn().write_packet(&call_handlers!(Packet::build(0x03, |p| p.write_usize_varint(threshold))?, client, Login, outcoming))?;
 				client.conn().set_compression(Some(threshold)); // Устанавливаем сжатие на соединении
 			}
 
 			// Отправка пакета Login Success
-			client.conn().write_packet(&Packet::build(0x02, |p| {
+			client.conn().write_packet(&call_handlers!(Packet::build(0x02, |p| {
 				p.write_uuid(&uuid)?;
 				p.write_string(&name)?;
 				p.write_varint(0)
-			})?)?;
+			})?, client, Login, outcoming))?;
 
-			let packet = client.conn().read_packet()?;
+			let packet = call_handlers!(client.conn().read_packet()?, client, Login, incoming);
 
 			if packet.id() != 0x03 {
 				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Login Acknowledged"))); 
@@ -273,7 +296,7 @@ fn handle_connection(
 			// Получение бренда клиента из Serverbound Plugin Message
 			// Identifier канала откуда берется бренд: minecraft:brand
 			let brand = loop {
-				let mut packet = client.conn().read_packet()?;
+				let mut packet = call_handlers!(client.conn().read_packet()?, client, Configuration, incoming);
 
 				if packet.id() == 0x02 { // Пакет Serverbound Plugin Message
 					let identifier = packet.read_string()?;
@@ -291,9 +314,9 @@ fn handle_connection(
 				};
 			};
 
-			debug!("brand: {brand}");
+			// debug!("brand: {brand}");
 
-			let mut packet = client.conn().read_packet()?;
+			let mut packet = call_handlers!(client.conn().read_packet()?, client, Configuration, incoming);
 
 			// Пакет Client Information
 			if packet.id() != 0x00 { 
@@ -310,15 +333,15 @@ fn handle_connection(
 			let allow_server_listings = packet.read_boolean()?; // allows showing player in server listings in status
 			let particle_status = packet.read_varint()?; // 0 for all, 1 for decreased, 2 for minimal
 
-			debug!("locale: {locale}");
-			debug!("view_distance: {view_distance}");
-			debug!("chat_mode: {chat_mode}");
-			debug!("chat_colors: {chat_colors}");
-			debug!("displayed_skin_parts: {displayed_skin_parts}");
-			debug!("main_hand: {main_hand}");
-			debug!("enable_text_filtering: {enable_text_filtering}");
-			debug!("allow_server_listings: {allow_server_listings}");
-			debug!("particle_status: {particle_status}");
+			// debug!("locale: {locale}");
+			// debug!("view_distance: {view_distance}");
+			// debug!("chat_mode: {chat_mode}");
+			// debug!("chat_colors: {chat_colors}");
+			// debug!("displayed_skin_parts: {displayed_skin_parts}");
+			// debug!("main_hand: {main_hand}");
+			// debug!("enable_text_filtering: {enable_text_filtering}");
+			// debug!("allow_server_listings: {allow_server_listings}");
+			// debug!("particle_status: {particle_status}");
 
 			client.set_client_info(ClientInfo { 
 				brand, 
@@ -335,9 +358,9 @@ fn handle_connection(
 
 			// TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
 
-			client.conn().write_packet(&Packet::empty(0x03))?;
+			client.conn().write_packet(&call_handlers!(Packet::empty(0x03), client, Configuration, outcoming))?;
 
-			let packet = client.conn().read_packet()?;
+			let packet = call_handlers!(client.conn().read_packet()?, client, Configuration, incoming);
 
 			if packet.id() != 0x03 {
 				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Acknowledge Finish Configuration"))); 
@@ -347,12 +370,12 @@ fn handle_connection(
 
 			// Отключение игрока с сообщением
 			// Отправляет в формате NBT TAG_String (https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/NBT#Specification:string_tag)
-			client.conn().write_packet(&Packet::build(0x1C, |p| {
+			client.conn().write_packet(&call_handlers!(Packet::build(0x1C, |p| {
 				let message = "server is in developmenet lol".to_string();
 				p.write_byte(0x08)?; // NBT Type Name (TAG_String)
 				p.write_unsigned_short(message.len() as u16)?; // String length in unsigned short
 				p.write_bytes(message.as_bytes())
-			})?)?;
+			})?, client, Play, outcoming))?;
 
 			// TODO: Сделать отправку пакетов Play
 		},
