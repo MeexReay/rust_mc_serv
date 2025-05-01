@@ -2,7 +2,7 @@ use std::{io::{Read, Write}, net::TcpListener, thread, time::Duration};
 
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
 
-use data::ServerError;
+use data::{ServerError, TextComponent};
 use pohuy::Pohuy;
 
 pub mod pohuy;
@@ -29,8 +29,13 @@ fn main() {
 			stream.set_write_timeout(Some(Duration::from_secs(5))).pohuy();
 
 			// Обработка подключения
-			// Если ошибка -> похуй
-			handle_connection(MinecraftConnection::new(&stream)).pohuy();
+			// Если ошибка -> выводим
+			match handle_connection(MinecraftConnection::new(&stream)) {
+				Ok(_) => {},
+				Err(error) => {
+					println!("Ошибка подключения: {error:?}");
+				},
+			};
 
 			println!("Отключение: {}", addr);
 		});
@@ -60,35 +65,45 @@ fn handle_connection(
 
 				match packet.id() {
 					0x00 => { // Запрос статуса
-						conn.write_packet(&Packet::build(0x00, |packet| {
-							// Отправка статуса
-							// В будущем это надо будет переделать чтобы это отправлялось через Listener'ы а не самим ядром сервера
-							// Хотя можно сделать и дефолтное значение через конфиг
-							packet.write_string(&format!(
-								// Пример статуса с дебаг-инфой
-								"{{
-									\"version\": {{
-										\"name\": \"1.21.5\",
-										\"protocol\": {protocol_version}
-									}},
-									\"players\": {{
-										\"max\": 100,
-										\"online\": 5,
-										\"sample\": [
-											{{
-												\"name\": \"thinkofdeath\",
-												\"id\": \"4566e69f-c907-48ee-8d71-d7ba5aa00d20\"
-											}}
-										]
-									}},
-									\"description\": {{
-										\"text\": \"pv: {protocol_version}, sp: {server_port}\nsa: {server_address}\"
-									}},
-									\"favicon\": \"data:image/png;base64,<data>\",
-									\"enforcesSecureChat\": false
-								}}"
-							))
-						})?)?;
+						let mut packet = Packet::empty(0x00);
+
+						// Отправка статуса
+						// В будущем это надо будет переделать чтобы это отправлялось через Listener'ы а не самим ядром сервера
+						// Хотя можно сделать и дефолтное значение через конфиг
+						packet.write_string(&format!(
+							// Пример статуса
+							"{{
+								\"version\": {{
+									\"name\": \"1.21.5\",
+									\"protocol\": {protocol_version}
+								}},
+								\"players\": {{
+									\"max\": 100,
+									\"online\": 5,
+									\"sample\": [
+										{{
+											\"name\": \"thinkofdeath\",
+											\"id\": \"4566e69f-c907-48ee-8d71-d7ba5aa00d20\"
+										}}
+									]
+								}},
+								\"description\": {},
+								\"favicon\": \"data:image/png;base64,<data>\",
+								\"enforcesSecureChat\": false
+							}}",
+
+							// В MOTD пихаем дебаг инфу
+							TextComponent::builder()
+								.text(format!("pv: {protocol_version}, sp: {server_port}\nsa: {server_address}"))
+								.color("red".to_string())
+								.bold(true)
+								.italic(true)
+								.underlined(true)
+								.build()
+								.to_string()?
+						))?;
+
+						conn.write_packet(&packet)?;
 					},
 					0x01 => { // Пинг
 						conn.write_packet(&packet)?; 
@@ -104,9 +119,16 @@ fn handle_connection(
 		2 | 3 => { // Тип подключения - игра
 			// Отключение игрока с сообщением
 			// Заглушка так сказать
-			conn.write_packet(&Packet::build(0x00, |packet| {
-				packet.write_string("{\"text\": \"This server is in developement!!\", \"color\": \"red\", \"bold\": true}")
-			})?)?;
+			let mut packet = Packet::empty(0x00);
+
+			packet.write_string(&TextComponent::builder()
+				.text(format!("This server is in developement!!"))
+				.color("gold".to_string())
+				.bold(true)
+				.build()
+				.to_string()?)?;
+
+			conn.write_packet(&packet)?;
 
 			// TODO: Чтение Configuration (возможно с примешиванием Listener'ов)
 			// TODO: Обработчик пакетов Play (тоже трейт), который уже будет дергать Listener'ы
