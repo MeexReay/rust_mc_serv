@@ -2,6 +2,7 @@ use std::{env::args, io::Read, net::TcpListener, path::PathBuf, sync::Arc, threa
 
 use config::Config;
 use context::{ClientContext, Listener, PacketHandler, ServerContext};
+use log::{debug, error, info};
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
 
 use data::{ServerError, TextComponent};
@@ -76,12 +77,14 @@ impl PacketHandler for ExamplePacketHandler {}
 
 
 fn main() {
+	colog::init();
+
 	// Получение аргументов
 	let exec = args().next().expect("Неизвестная система");
 	let args = args().skip(1).collect::<Vec<String>>();
 
 	if args.len() > 1 {
-		println!("Использование: {exec} [путь до файла конфигурации]"); 
+		info!("Использование: {exec} [путь до файла конфигурации]"); 
 		return;
 	}
 
@@ -92,7 +95,7 @@ fn main() {
 	let config = match Config::load_from_file(config_path) {
 		Some(config) => config,
 		None => {
-			println!("Ошибка чтения конфигурации");
+			error!("Ошибка чтения конфигурации");
 			return;
 		},
 	};
@@ -114,17 +117,17 @@ fn main() {
 
 	// Биндим сервер где надо
 	let Ok(listener) = TcpListener::bind(&server.config.bind.host) else {
-	 	println!("Не удалось забиндить сервер на {}", &server.config.bind.host); 
+	 	error!("Не удалось забиндить сервер на {}", &server.config.bind.host); 
 		return;
 	};
 
-	println!("Сервер запущен на {}", &server.config.bind.host); 
+	info!("Сервер запущен на {}", &server.config.bind.host); 
 
 	while let Ok((stream, addr)) = listener.accept() {
 		let server = server.clone();
 
 		thread::spawn(move || { 
-			println!("Подключение: {}", addr);
+			info!("Подключение: {}", addr);
 
 			// Установка таймаутов на чтение и запись
 			// По умолчанию пусть будет 5 секунд, надо будет сделать настройку через конфиг
@@ -143,11 +146,11 @@ fn main() {
 			match handle_connection(client) {
 				Ok(_) => {},
 				Err(error) => {
-					println!("Ошибка подключения: {error:?}");
+					error!("Ошибка подключения: {error:?}");
 				},
 			};
 
-			println!("Отключение: {}", addr);
+			info!("Отключение: {}", addr);
 		});
 	}
 }
@@ -169,6 +172,11 @@ fn handle_connection(
 	let server_address = packet.read_string()?; // Получаем домен/адрес сервера к которому пытается подключиться клиент, например "play.example.com", а не айпи
 	let server_port = packet.read_unsigned_short()?; // Все тоже самое что и с адресом сервера и все потому же и за тем же
 	let next_state = packet.read_varint()?; // Тип подключения: 1 для получения статуса и пинга, 2 и 3 для обычного подключения
+
+	debug!("protocol_version: {protocol_version}");
+	debug!("server_address: {server_address}");
+	debug!("server_port: {server_port}");
+	debug!("next_state: {next_state}");
 
 	client.handshake(protocol_version, server_address, server_port);
 
@@ -223,6 +231,9 @@ fn handle_connection(
 			let player_name = packet.read_string()?;
 			let player_uuid = packet.read_uuid()?;
 
+			debug!("name: {player_name}");
+			debug!("uuid: {player_uuid}");
+
 			if client.server.config.server.online_mode {
 				// TODO: encryption packets
 			}
@@ -247,45 +258,58 @@ fn handle_connection(
 			}
 
 			// Мы перешли в режим Configuration
+			
+			// Получение бренда клиента из Serverbound Plugin Message
+			// Identifier канала откуда берется бренд: minecraft:brand
+			let brand = loop {
+				let mut packet = client.conn().read_packet()?;
+
+				if packet.id() == 0x02 { // Пакет Serverbound Plugin Message
+					let identifier = packet.read_string()?;
+
+					let mut data = Vec::new();
+					packet.get_mut().read_to_end(&mut data).unwrap();
+
+					if identifier == "minecraft:brand" { 
+						break String::from_utf8_lossy(&data).to_string();
+					} else {
+						error!("unknown plugin message channel: {}", identifier);
+					}
+				} else {
+					return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Serverbound Plugin Message"))); 
+				};
+			};
+
+			debug!("brand: {brand}");
 
 			let mut packet = client.conn().read_packet()?;
 
-			if packet.id() == 0x02 { // Пакет Serverbound Plugin Message
-				let identifier = packet.read_string()?;
-				let mut data = Vec::new();
-				packet.get_mut().read_to_end(&mut data).unwrap();
-
-				// TODO: Сделать запись всех этих полезных данных в клиент контекст
-
-				println!("got plugin message: {}", identifier);
+			// Пакет Client Information
+			if packet.id() != 0x00 { 
+				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Client Information"))); 
 			}
 
-			let mut packet = client.conn().read_packet()?;
+			let locale = packet.read_string()?; // for example: ru_RU
+			let view_distance = packet.read_signed_byte()?; // client-side render distance in chunks
+			let chat_mode = packet.read_varint()?; // 0: enabled, 1: commands only, 2: hidden. See Chat#Client chat mode for more information. 
+			let chat_colors = packet.read_boolean()?; // this settings does nothing on client but can be used on serverside
+			let displayed_skin_parts = packet.read_byte()?; // bit mask https://minecraft.wiki/w/Java_Edition_protocol#Client_Information_(configuration)
+			let main_hand = packet.read_varint()?; // 0 for left and 1 for right
+			let enable_text_filtering = packet.read_boolean()?; // filtering text for profanity, always false for offline mode
+			let allow_server_listings = packet.read_boolean()?; // allows showing player in server listings in status
+			let particle_status = packet.read_varint()?; // 0 for all, 1 for decreased, 2 for minimal
 
-			if packet.id() == 0x00 { // Пакет Serverbound Plugin Message
-				let locale = packet.read_string()?; // for example: ru_RU
-				let view_distance = packet.read_signed_byte()?; // client-side render distance in chunks
-				let chat_mode = packet.read_varint()?; // 0: enabled, 1: commands only, 2: hidden. See Chat#Client chat mode for more information. 
-				let chat_colors = packet.read_boolean()?; // this settings does nothing on client but can be used on serverside
-				let displayed_skin_parts = packet.read_byte()?; // bit mask https://minecraft.wiki/w/Java_Edition_protocol#Client_Information_(configuration)
-				let main_hand = packet.read_varint()?; // 0 for left and 1 for right
-				let enable_text_filtering = packet.read_boolean()?; // filtering text for profanity, always false for offline mode
-				let allow_server_listings = packet.read_boolean()?; // allows showing player in server listings in status
-				let particle_status = packet.read_varint()?; // 0 for all, 1 for decreased, 2 for minimal
+			// TODO: Сделать запись всех этих полезных данных в клиент контекст
 
-				// TODO: Сделать запись всех этих полезных данных в клиент контекст
-
-				println!("got client information:");
-				println!("locale: {locale}");
-				println!("view_distance: {view_distance}");
-				println!("chat_mode: {chat_mode}");
-				println!("chat_colors: {chat_colors}");
-				println!("displayed_skin_parts: {displayed_skin_parts}");
-				println!("main_hand: {main_hand}");
-				println!("enable_text_filtering: {enable_text_filtering}");
-				println!("allow_server_listings: {allow_server_listings}");
-				println!("particle_status: {particle_status}");
-			}
+			debug!("locale: {locale}");
+			debug!("view_distance: {view_distance}");
+			debug!("chat_mode: {chat_mode}");
+			debug!("chat_colors: {chat_colors}");
+			debug!("displayed_skin_parts: {displayed_skin_parts}");
+			debug!("main_hand: {main_hand}");
+			debug!("enable_text_filtering: {enable_text_filtering}");
+			debug!("allow_server_listings: {allow_server_listings}");
+			debug!("particle_status: {particle_status}");
 
 			// TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
 
