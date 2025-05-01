@@ -1,7 +1,8 @@
 use std::{error::Error, fmt::Display};
+use palette::{Hsl, IntoColor, Srgb};
 use serde::{Deserialize, Serialize};
 
-use rust_mc_proto::{DataReader, DataWriter, ProtocolError};
+use rust_mc_proto::ProtocolError;
 use serde_with::skip_serializing_none;
 
 // Ошибки сервера
@@ -52,62 +53,64 @@ pub struct TextComponent {
 }
 
 impl TextComponent {
+    pub fn new(text: String) -> Self {
+        Self {
+            text,
+            color: None,
+            bold: None,
+            italic: None,
+            underlined: None,
+            strikethrough: None,
+            obfuscated: None,
+            extra: None
+        }
+    }
+
+    pub fn rainbow(text: String) -> TextComponent {
+        if text.is_empty() {
+            return TextComponent::new(text);
+        }
+
+        let children = text.char_indices()
+            .map(|(i, c)| {
+                let hue = (i as f32) / (text.chars().count() as f32) * 360.0;
+                let hsl = Hsl::new(hue, 1.0, 0.5);
+                let rgb: Srgb = hsl.into_color();
+                let r = (rgb.red * 255.0).round() as u8;
+                let g = (rgb.green * 255.0).round() as u8;
+                let b = (rgb.blue * 255.0).round() as u8;
+                let mut component = TextComponent::new(c.to_string());
+                component.color = Some(format!("#{:02X}{:02X}{:02X}", r, g, b));
+                component
+            })
+            .collect::<Vec<TextComponent>>();
+        
+        let mut parent = children[0].clone();
+        parent.extra = Some(children[1..].to_vec());
+        parent
+    }
+
     pub fn builder() -> TextComponentBuilder {
         TextComponentBuilder::new()
     }
 
-    pub fn to_string(self) -> Result<String, ServerError> {
-        self.try_into()
+    pub fn as_nbt(self) -> Result<Vec<u8>, ServerError> {
+        fastnbt::to_bytes(&self)
+            .map_err(|_| ServerError::SerTextComponent)
     }
 
-    pub fn from_string(text: String) -> Result<TextComponent, ServerError> {
-        Self::try_from(text)
+    pub fn from_nbt(bytes: &[u8]) -> Result<TextComponent, ServerError> {
+        fastnbt::from_bytes(bytes)
+            .map_err(|_| ServerError::DeTextComponent)
     }
-}
 
-pub trait WriteTextComponent {
-    fn write_text_component(&mut self, component: &TextComponent) -> Result<(), ServerError>;
-}
-
-impl<T: DataWriter> WriteTextComponent for T {
-    fn write_text_component(&mut self, component: &TextComponent) -> Result<(), ServerError> {
-        Ok(self.write_string(TryInto::<String>::try_into(component.clone())?.as_str())?)
-    }
-}
-
-pub trait ReadTextComponent {
-    fn read_text_component(&mut self) -> Result<TextComponent, ServerError>;
-}
-
-impl<T: DataReader> ReadTextComponent for T {
-    fn read_text_component(&mut self) -> Result<TextComponent, ServerError> {
-        TextComponent::try_from(self.read_string()?)
-    }
-}
-
-impl TryInto<String> for TextComponent {
-    type Error = ServerError;
-
-    fn try_into(self) -> Result<String, Self::Error> {
+    pub fn as_json(self) -> Result<String, ServerError> {
         serde_json::to_string(&self)
             .map_err(|_| ServerError::SerTextComponent)
     }
-}
 
-impl TryFrom<String> for TextComponent {
-    type Error = ServerError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        serde_json::from_str(&value)
-            .map_err(|_| ServerError::DeTextComponent)
-    }
-}
-
-impl TryFrom<&str> for TextComponent {
-    type Error = ServerError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        serde_json::from_str(&value)
+    pub fn from_json(text: &str) -> Result<TextComponent, ServerError> {
+        serde_json::from_str(text)
             .map_err(|_| ServerError::DeTextComponent)
     }
 }

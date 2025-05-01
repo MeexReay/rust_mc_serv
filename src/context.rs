@@ -3,16 +3,16 @@ use std::{net::{SocketAddr, TcpStream}, sync::{atomic::{AtomicI32, AtomicU16, Or
 use itertools::Itertools;
 use rust_mc_proto::{MinecraftConnection, Packet};
 
-use crate::{config::ServerConfig, data::ServerError};
+use crate::{config::Config, data::ServerError};
 
 pub struct ServerContext {
-    pub config: Arc<ServerConfig>,
+    pub config: Arc<Config>,
     listeners: Vec<Box<dyn Listener>>,
     handlers: Vec<Box<dyn PacketHandler>>
 }
 
 impl ServerContext {
-    pub fn new(config: Arc<ServerConfig>) -> ServerContext {
+    pub fn new(config: Arc<Config>) -> ServerContext {
         ServerContext {
             config,
             listeners: Vec::new(),

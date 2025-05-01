@@ -1,6 +1,6 @@
-use std::{env::args, io::{Read, Write}, net::TcpListener, path::PathBuf, sync::Arc, thread, time::Duration};
+use std::{env::args, io::Read, net::TcpListener, path::PathBuf, sync::Arc, thread, time::Duration};
 
-use config::ServerConfig;
+use config::Config;
 use context::{ClientContext, Listener, PacketHandler, ServerContext};
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
 
@@ -63,7 +63,7 @@ impl Listener for ExampleListener {
 						.build()
 				])
 				.build()
-				.to_string()?
+				.as_json()?
 		);
 
 		Ok(())
@@ -89,7 +89,7 @@ fn main() {
 	let config_path = PathBuf::from(args.get(0).unwrap_or(&"server.toml".to_string()));
 
 	// Чтение конфига, если ошибка - выводим
-	let config = match ServerConfig::load_from_file(config_path) {
+	let config = match Config::load_from_file(config_path) {
 		Some(config) => config,
 		None => {
 			println!("Ошибка чтения конфигурации");
@@ -113,12 +113,12 @@ fn main() {
 	let server = Arc::new(server);
 
 	// Биндим сервер где надо
-	let Ok(listener) = TcpListener::bind(&server.config.host) else {
-	 	println!("Не удалось забиндить сервер на {}", &server.config.host); 
+	let Ok(listener) = TcpListener::bind(&server.config.bind.host) else {
+	 	println!("Не удалось забиндить сервер на {}", &server.config.bind.host); 
 		return;
 	};
 
-	println!("Сервер запущен на {}", &server.config.host); 
+	println!("Сервер запущен на {}", &server.config.bind.host); 
 
 	while let Ok((stream, addr)) = listener.accept() {
 		let server = server.clone();
@@ -128,8 +128,8 @@ fn main() {
 
 			// Установка таймаутов на чтение и запись
 			// По умолчанию пусть будет 5 секунд, надо будет сделать настройку через конфиг
-			stream.set_read_timeout(Some(Duration::from_secs(server.config.timeout))).pohuy();
-			stream.set_write_timeout(Some(Duration::from_secs(server.config.timeout))).pohuy();
+			stream.set_read_timeout(Some(Duration::from_secs(server.config.bind.timeout))).pohuy();
+			stream.set_write_timeout(Some(Duration::from_secs(server.config.bind.timeout))).pohuy();
 
 			// Оборачиваем стрим в майнкрафт конекшн лично для нашего удовольствия
 			let conn = MinecraftConnection::new(stream);
@@ -214,22 +214,101 @@ fn handle_connection(
 				}
 			}
 		},
-		2 | 3 => { // Тип подключения - игра
+		2 => { // Тип подключения - игра
+			// Мы находимся в режиме Login
+
+			// Читаем пакет Login Start
+			let mut packet = client.conn().read_packet()?;
+
+			let player_name = packet.read_string()?;
+			let player_uuid = packet.read_uuid()?;
+
+			if client.server.config.server.online_mode {
+				// TODO: encryption packets
+			}
+
+			// Отправляем пакет Set Compression если сжатие указано
+			if let Some(threshold) = client.server.config.server.compression_threshold {
+				client.conn().write_packet(&Packet::build(0x03, |p| p.write_usize_varint(threshold))?)?;
+				client.conn().set_compression(Some(threshold)); // Устанавливаем сжатие на соединении
+			}
+
+			// Отправка пакета Login Success
+			client.conn().write_packet(&Packet::build(0x02, |p| {
+				p.write_uuid(&player_uuid)?;
+				p.write_string(&player_name)?;
+				p.write_varint(0)
+			})?)?;
+
+			let packet = client.conn().read_packet()?;
+
+			if packet.id() != 0x03 {
+				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Login Acknowledged"))); 
+			}
+
+			// Мы перешли в режим Configuration
+
+			let mut packet = client.conn().read_packet()?;
+
+			if packet.id() == 0x02 { // Пакет Serverbound Plugin Message
+				let identifier = packet.read_string()?;
+				let mut data = Vec::new();
+				packet.get_mut().read_to_end(&mut data).unwrap();
+
+				// TODO: Сделать запись всех этих полезных данных в клиент контекст
+
+				println!("got plugin message: {}", identifier);
+			}
+
+			let mut packet = client.conn().read_packet()?;
+
+			if packet.id() == 0x00 { // Пакет Serverbound Plugin Message
+				let locale = packet.read_string()?; // for example: ru_RU
+				let view_distance = packet.read_signed_byte()?; // client-side render distance in chunks
+				let chat_mode = packet.read_varint()?; // 0: enabled, 1: commands only, 2: hidden. See Chat#Client chat mode for more information. 
+				let chat_colors = packet.read_boolean()?; // this settings does nothing on client but can be used on serverside
+				let displayed_skin_parts = packet.read_byte()?; // bit mask https://minecraft.wiki/w/Java_Edition_protocol#Client_Information_(configuration)
+				let main_hand = packet.read_varint()?; // 0 for left and 1 for right
+				let enable_text_filtering = packet.read_boolean()?; // filtering text for profanity, always false for offline mode
+				let allow_server_listings = packet.read_boolean()?; // allows showing player in server listings in status
+				let particle_status = packet.read_varint()?; // 0 for all, 1 for decreased, 2 for minimal
+
+				// TODO: Сделать запись всех этих полезных данных в клиент контекст
+
+				println!("got client information:");
+				println!("locale: {locale}");
+				println!("view_distance: {view_distance}");
+				println!("chat_mode: {chat_mode}");
+				println!("chat_colors: {chat_colors}");
+				println!("displayed_skin_parts: {displayed_skin_parts}");
+				println!("main_hand: {main_hand}");
+				println!("enable_text_filtering: {enable_text_filtering}");
+				println!("allow_server_listings: {allow_server_listings}");
+				println!("particle_status: {particle_status}");
+			}
+
+			// TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
+
+			client.conn().write_packet(&Packet::empty(0x03))?;
+
+			let packet = client.conn().read_packet()?;
+
+			if packet.id() != 0x03 {
+				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Acknowledge Finish Configuration"))); 
+			}
+
+			// Мы перешли в режим Play
+
 			// Отключение игрока с сообщением
-			// Заглушка так сказать
-			let mut packet = Packet::empty(0x00);
+			// Отправляет в формате NBT TAG_String (https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/NBT#Specification:string_tag)
+			client.conn().write_packet(&Packet::build(0x1C, |p| {
+				let message = "server is in developmenet lol".to_string();
+				p.write_byte(0x08)?; // NBT Type Name (TAG_String)
+				p.write_unsigned_short(message.len() as u16)?; // String length in unsigned short
+				p.write_bytes(message.as_bytes())
+			})?)?;
 
-			packet.write_string(&TextComponent::builder()
-				.text("This server is in developement!!")
-				.color("gold")
-				.bold(true)
-				.build()
-				.to_string()?)?;
-
-			client.conn().write_packet(&packet)?;
-
-			// TODO: Чтение Configuration (возможно с примешиванием Listener'ов)
-			// TODO: Обработчик пакетов Play (тоже трейт), который уже будет дергать Listener'ы
+			// TODO: Сделать отправку пакетов Play
 		},
 		_ => {
 			return Err(ServerError::UnknownPacket(format!("Неизвестный NextState при рукопожатии"))); 
