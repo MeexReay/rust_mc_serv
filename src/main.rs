@@ -3,6 +3,7 @@ use std::{env::args, io::Read, net::TcpListener, path::PathBuf, sync::Arc, threa
 use config::Config;
 use context::{ClientContext, Listener, PacketHandler, ServerContext};
 use log::{debug, error, info};
+use player::{ClientInfo, Handshake, PlayerInfo};
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
 
 use data::{ServerError, TextComponent};
@@ -11,6 +12,7 @@ use pohuy::Pohuy;
 pub mod config;
 pub mod data;
 pub mod context;
+pub mod player;
 pub mod pohuy; 
 
 
@@ -38,7 +40,7 @@ impl Listener for ExampleListener {
 				\"favicon\": \"data:image/png;base64,<data>\",
 				\"enforcesSecureChat\": false
 			}}",
-			client.protocol_version(),
+			client.handshake().unwrap().protocol_version,
 			TextComponent::builder()
 				.text("Hello World! ")
 				.extra(vec![
@@ -47,7 +49,7 @@ impl Listener for ExampleListener {
 						.color("gold")
 						.extra(vec![
 							TextComponent::builder()
-								.text(&client.protocol_version().to_string())
+								.text(&client.handshake().unwrap().protocol_version.to_string())
 								.underlined(true)
 								.build()
 						])	
@@ -57,7 +59,10 @@ impl Listener for ExampleListener {
 						.color("green")
 						.extra(vec![
 							TextComponent::builder()
-								.text(&format!("{}:{}", client.server_address(), client.server_port()))
+								.text(&format!("{}:{}", 
+									client.handshake().unwrap().server_address, 
+									client.handshake().unwrap().server_port
+								))
 								.underlined(true)
 								.build()
 						])	
@@ -178,7 +183,7 @@ fn handle_connection(
 	debug!("server_port: {server_port}");
 	debug!("next_state: {next_state}");
 
-	client.handshake(protocol_version, server_address, server_port);
+	client.set_handshake(Handshake { protocol_version, server_address, server_port });
 
 	match next_state {
 		1 => { // Тип подключения - статус
@@ -228,11 +233,13 @@ fn handle_connection(
 			// Читаем пакет Login Start
 			let mut packet = client.conn().read_packet()?;
 
-			let player_name = packet.read_string()?;
-			let player_uuid = packet.read_uuid()?;
+			let name = packet.read_string()?;
+			let uuid = packet.read_uuid()?;
 
-			debug!("name: {player_name}");
-			debug!("uuid: {player_uuid}");
+			debug!("name: {name}");
+			debug!("uuid: {uuid}");
+
+			client.set_player_info(PlayerInfo { name: name.clone(), uuid: uuid.clone() });
 
 			if client.server.config.server.online_mode {
 				// TODO: encryption packets
@@ -246,8 +253,8 @@ fn handle_connection(
 
 			// Отправка пакета Login Success
 			client.conn().write_packet(&Packet::build(0x02, |p| {
-				p.write_uuid(&player_uuid)?;
-				p.write_string(&player_name)?;
+				p.write_uuid(&uuid)?;
+				p.write_string(&name)?;
 				p.write_varint(0)
 			})?)?;
 
@@ -299,8 +306,6 @@ fn handle_connection(
 			let allow_server_listings = packet.read_boolean()?; // allows showing player in server listings in status
 			let particle_status = packet.read_varint()?; // 0 for all, 1 for decreased, 2 for minimal
 
-			// TODO: Сделать запись всех этих полезных данных в клиент контекст
-
 			debug!("locale: {locale}");
 			debug!("view_distance: {view_distance}");
 			debug!("chat_mode: {chat_mode}");
@@ -310,6 +315,19 @@ fn handle_connection(
 			debug!("enable_text_filtering: {enable_text_filtering}");
 			debug!("allow_server_listings: {allow_server_listings}");
 			debug!("particle_status: {particle_status}");
+
+			client.set_client_info(ClientInfo { 
+				brand, 
+				locale, 
+				view_distance, 
+				chat_mode, 
+				chat_colors, 
+				displayed_skin_parts, 
+				main_hand, 
+				enable_text_filtering, 
+				allow_server_listings, 
+				particle_status
+			});
 
 			// TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
 

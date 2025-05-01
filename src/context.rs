@@ -1,9 +1,9 @@
-use std::{net::{SocketAddr, TcpStream}, sync::{atomic::{AtomicI32, AtomicU16, Ordering}, Arc, RwLock, RwLockWriteGuard}};
+use std::{net::{SocketAddr, TcpStream}, sync::{Arc, RwLock, RwLockWriteGuard}};
 
 use itertools::Itertools;
 use rust_mc_proto::{MinecraftConnection, Packet};
 
-use crate::{config::Config, data::ServerError};
+use crate::{config::Config, data::ServerError, player::{ClientInfo, Handshake, PlayerInfo}};
 
 pub struct ServerContext {
     pub config: Arc<Config>,
@@ -55,9 +55,9 @@ pub struct ClientContext {
     pub server: Arc<ServerContext>,
     pub conn: RwLock<MinecraftConnection<TcpStream>>,
     pub addr: SocketAddr,
-    protocol_version: AtomicI32,
-    server_address: RwLock<String>,
-    server_port: AtomicU16,
+    pub handshake: RwLock<Option<Handshake>>,
+    pub client_info: RwLock<Option<ClientInfo>>,
+    pub player_info: RwLock<Option<PlayerInfo>>
 }
 
 impl ClientContext {
@@ -69,33 +69,34 @@ impl ClientContext {
             server,
             addr: conn.get_ref().peer_addr().unwrap(),
             conn: RwLock::new(conn),
-            protocol_version: AtomicI32::default(),
-            server_address: RwLock::new(String::new()),
-            server_port: AtomicU16::default()
+            handshake: RwLock::new(None),
+            client_info: RwLock::new(None),
+            player_info: RwLock::new(None)
         }
     }
 
-    pub fn handshake(
-        self: &Arc<Self>, 
-        protocol_version: i32, 
-        server_address: String, 
-        server_port: u16
-    ) -> () {
-        self.protocol_version.store(protocol_version, Ordering::SeqCst);
-        self.server_port.store(server_port, Ordering::SeqCst);
-        *self.server_address.write().unwrap() = server_address;
+    pub fn set_handshake(self: &Arc<Self>, handshake: Handshake) {
+        *self.handshake.write().unwrap() = Some(handshake);
     }
 
-    pub fn protocol_version(self: &Arc<Self>) -> i32 {
-        self.protocol_version.load(Ordering::SeqCst)
+    pub fn set_client_info(self: &Arc<Self>, client_info: ClientInfo) {
+        *self.client_info.write().unwrap() = Some(client_info);
     }
 
-    pub fn server_port(self: &Arc<Self>) -> u16 {
-        self.server_port.load(Ordering::SeqCst)
+    pub fn set_player_info(self: &Arc<Self>, player_info: PlayerInfo) {
+        *self.player_info.write().unwrap() = Some(player_info);
     }
 
-    pub fn server_address(self: &Arc<Self>) -> String {
-        self.server_address.read().unwrap().clone()
+    pub fn handshake(self: &Arc<Self>) -> Option<Handshake> {
+        self.handshake.read().unwrap().clone()
+    }
+
+    pub fn client_info(self: &Arc<Self>) -> Option<ClientInfo> {
+        self.client_info.read().unwrap().clone()
+    }
+
+    pub fn player_info(self: &Arc<Self>) -> Option<PlayerInfo> {
+        self.player_info.read().unwrap().clone()
     }
 
     pub fn conn(self: &Arc<Self>) -> RwLockWriteGuard<'_, MinecraftConnection<TcpStream>> {
@@ -116,3 +117,6 @@ pub trait PacketHandler: Sync + Send {
     fn on_outcoming_packet(&self, _: Arc<ClientContext>, _: &mut Packet) -> Result<(), ServerError> { Ok(()) }
 }
 
+pub struct Player {
+
+}
