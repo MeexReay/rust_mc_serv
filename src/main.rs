@@ -97,6 +97,8 @@ impl PacketHandler for ExamplePacketHandler {
 
 
 fn main() {
+	// Инициализируем логи
+	// Чтобы читать debug-логи, юзаем `RUST_LOG=debug cargo run`
 	colog::init();
 
 	// Получение аргументов

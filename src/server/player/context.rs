@@ -7,7 +7,8 @@ use crate::server::{context::ServerContext, protocol::ConnectionState, ServerErr
 
 use super::protocol::ProtocolHelper;
 
-
+// Клиент контекст
+// Должен быть обернут в Arc для передачи между потоками
 pub struct ClientContext {
     pub server: Arc<ServerContext>,
     pub addr: SocketAddr,
@@ -18,6 +19,8 @@ pub struct ClientContext {
     state: RwLock<ConnectionState>
 }
 
+// Реализуем сравнение через адрес
+// IPv4 не должен обманывать, иначе у нас случится коллапс
 impl PartialEq for ClientContext {
     fn eq(&self, other: &Self) -> bool {
         self.addr == other.addr

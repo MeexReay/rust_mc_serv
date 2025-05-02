@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 use super::{config::Config, event::{Listener, PacketHandler}, player::context::ClientContext};
 
+// Контекст сервера
+// Должен быть обернут в Arc для передачи между потоками
 pub struct ServerContext {
     pub config: Arc<Config>,
     pub clients: DashMap<SocketAddr, Arc<ClientContext>>,

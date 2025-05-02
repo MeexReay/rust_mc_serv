@@ -17,12 +17,13 @@ pub mod protocol;
 // Ошибки сервера
 #[derive(Debug)]
 pub enum ServerError {
-    UnknownPacket(String),
-    Protocol(ProtocolError),
-    ConnectionClosed,
-    SerTextComponent,
-    DeTextComponent,
-    UnexpectedState
+    UnknownPacket(String),   // Неизвестный пакет, в строке указана ситуация в которой он неизвестен
+    Protocol(ProtocolError), // Ошибка в протоколе при работе с rust_mc_proto
+    ConnectionClosed,        // Соединение закрыто, единственная ошибка которая не логируется у handle_connection
+    SerTextComponent,        // Ошибка при сериализации текст-компонента
+    DeTextComponent,         // Ошибка при десериализации текст-компонента
+    UnexpectedState,         // Указывает на то что этот пакет не может быть отправлен в данном режиме (в основном через ProtocolHelper)
+    Other(String)            // Другая ошибка, либо очень специфичная, либо хз, лучше не использовать и создавать новое поле ошибки
 }
 
 impl Display for ServerError {
@@ -76,6 +77,8 @@ pub fn start_server(server: Arc<ServerContext>) {
            // Передавется во все листенеры и хандлеры чтобы определять именно этот клиент
            let client = Arc::new(ClientContext::new(server.clone(), conn));
 
+           // Добавляем клиента в список клиентов сервера
+           // Используем адрес как ключ, врятли ipv4 будет нам врать
            server.clients.insert(client.addr, client.clone());
 
            // Обработка подключения
@@ -88,6 +91,7 @@ pub fn start_server(server: Arc<ServerContext>) {
                },
            };
 
+           // Удаляем клиента из списка клиентов
            server.clients.remove(&client.addr);
 
            info!("Отключение: {}", addr);

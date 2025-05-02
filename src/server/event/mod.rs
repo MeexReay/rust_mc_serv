@@ -17,6 +17,20 @@ macro_rules! generate_handlers {
     };
 }
 
+// Пример использования:
+//                                                         let packet_dst = trigger_packet!(packet_src, client, Handshake, incoming);             
+//                                                                                             │           │        │          │                  
+//                                                                        ┌────────────────────┼───────────┼────────┼──────────┘                  
+//                                                                        │                    │           │        │
+//                                                                        │              ┌─────┼───────────┘        │
+//                                                                        │              │     │                    │
+//                                                                        │              │     │                    └──────────────────┐
+//                                                                        │              ▼     └───────────┐                           │
+// Сделается вот такой вызов на всех packet_handler'ах:                   ▼                                ▼                           ▼
+//                                                         handler.on_incoming_packet(client.clone(), &mut packet, ConnectionState::Handshake)   
+// packet_src можно заменить на получение пакета, например: trigger_packet!(client.conn().read_packet()?, client, Handshake, incoming);
+// В packet_dst будет лежать обратботанный пакет, прошедший через все хандлеры
+// TODO: сделать чтобы можно было ваще отключить обработку
 #[macro_export]
 macro_rules! trigger_packet {
     ($packet:expr, $client:ident, $state:ident, $bound:ident) => { 
@@ -35,49 +49,25 @@ macro_rules! trigger_packet {
     };
 }
 
+// Честно ни разу не проверял работу этого дерьма
+// Пример использования:
+// trigger_event!(client, status, $mut response, state);
+// Сделается вот такой вызов на всех листенерах:
+// listener.on_status(client.clone(), &mut response, state);
 #[macro_export]
 macro_rules! trigger_event {
-    ($client:ident, $event:ident, $($arg:expr),* $(,)?) => {{
+    ($client:ident, $event:ident, $(, $arg_ty:ty)* $(,)?) => {{
         paste::paste! {
-            trigger_event!(@declare_mut_vars 0, $($arg),*);
-
             for handler in $client.server.listeners(
                 |o| o.[<on_ $event _priority>]()
             ).iter() {
                 handler.[<on_ $event>](
                     $client.clone(),
-                    $(trigger_event!(@expand_arg 0, $arg)),*
+                    $(, $arg_ty)*
                 )?;
             }
         }
     }};
-
-    (@declare_mut_vars $i:tt, &mut $head:expr, $($tail:tt)*) => {
-        paste::paste! {
-            let mut [<__arg $i>] = $head;
-        }
-        trigger_event!(@declare_mut_vars trigger_event!(@inc $i), $($tail)*);
-    };
-    (@declare_mut_vars $i:tt, $head:expr, $($tail:tt)*) => {
-        trigger_event!(@declare_mut_vars trigger_event!(@inc $i), $($tail)*);
-    };
-    (@declare_mut_vars $_i:tt,) => {};
-
-    (@expand_arg $i:tt, &mut $head:expr) => {
-        paste::paste! { &mut [<__arg $i>] }
-    };
-    (@expand_arg $_i:tt, $head:expr) => {
-        $head
-    };
-
-    (@inc 0) => { 1 };
-    (@inc 1) => { 2 };
-    (@inc 2) => { 3 };
-    (@inc 3) => { 4 };
-    (@inc 4) => { 5 };
-    (@inc 5) => { 6 };
-    (@inc 6) => { 7 };
-    (@inc 7) => { 8 };
 }
 
 pub trait Listener: Sync + Send {

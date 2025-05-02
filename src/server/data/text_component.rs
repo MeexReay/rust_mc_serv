@@ -1,13 +1,13 @@
 use std::io::Read;
 
 use palette::{Hsl, IntoColor, Srgb};
-use rust_mc_proto::{DataReader, Packet};
+use rust_mc_proto::Packet;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::server::ServerError;
 
-
+use super::ReadWriteNBT;
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -21,6 +21,7 @@ pub struct TextComponent {
     pub strikethrough: Option<bool>,
     pub obfuscated: Option<bool>,
     pub extra: Option<Vec<TextComponent>>,
+    // TODO: добавить все остальные стандартные поля для текст-компонента типа клик ивентов и сделать отдельный структ для транслейт компонент
 }
 
 impl TextComponent {
@@ -161,11 +162,7 @@ impl TextComponentBuilder {
     }
 }
 
-pub trait ReadWriteNBT<T>: DataReader {
-    fn read_nbt(&mut self) -> Result<T, ServerError>;
-    fn write_nbt(&mut self, val: &T) -> Result<(), ServerError>;
-}
-
+// Реализуем читалку-записывалку текст-компонентов для пакета
 impl ReadWriteNBT<TextComponent> for Packet {
     fn read_nbt(&mut self) -> Result<TextComponent, ServerError> {
         let mut data = Vec::new();

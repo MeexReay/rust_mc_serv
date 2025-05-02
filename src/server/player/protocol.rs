@@ -2,11 +2,18 @@ use std::{io::Read, sync::Arc};
 
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 
-use crate::server::{data::text_component::{ReadWriteNBT, TextComponent}, protocol::ConnectionState, ServerError};
+use crate::server::{data::text_component::TextComponent, data::ReadWriteNBT, protocol::ConnectionState, ServerError};
 
 use super::context::ClientContext;
 
 
+// Помощник в работе с протоколом
+// Может быть использован где угодно, но сделан именно для листенеров и пакет хандлеров
+// Через него удобно делать всякую одинаковую херь
+// Возможно надо было бы сделать прям обязательный какойто структ через который только можно было отправлять пакеты ...
+// ... но мне лень
+// Пусть юзают подключение и отправляют пакеты через него если хотят
+// Почему бы и нет если да
 pub struct ProtocolHelper {
     client: Arc<ClientContext>,
     state: ConnectionState
