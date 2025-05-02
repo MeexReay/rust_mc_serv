@@ -1,8 +1,8 @@
-use std::{error::Error, fmt::Display};
+use std::{error::Error, fmt::Display, io::Read};
 use palette::{Hsl, IntoColor, Srgb};
 use serde::{Deserialize, Serialize};
 
-use rust_mc_proto::ProtocolError;
+use rust_mc_proto::{DataReader, Packet, ProtocolError};
 use serde_with::skip_serializing_none;
 
 // Ошибки сервера
@@ -12,7 +12,8 @@ pub enum ServerError {
     Protocol(ProtocolError),
     ConnectionClosed,
     SerTextComponent,
-    DeTextComponent
+    DeTextComponent,
+    UnexpectedState
 }
 
 impl Display for ServerError {
@@ -94,16 +95,6 @@ impl TextComponent {
         TextComponentBuilder::new()
     }
 
-    pub fn as_nbt(self) -> Result<Vec<u8>, ServerError> {
-        fastnbt::to_bytes(&self)
-            .map_err(|_| ServerError::SerTextComponent)
-    }
-
-    pub fn from_nbt(bytes: &[u8]) -> Result<TextComponent, ServerError> {
-        fastnbt::from_bytes(bytes)
-            .map_err(|_| ServerError::DeTextComponent)
-    }
-
     pub fn as_json(self) -> Result<String, ServerError> {
         serde_json::to_string(&self)
             .map_err(|_| ServerError::SerTextComponent)
@@ -112,6 +103,34 @@ impl TextComponent {
     pub fn from_json(text: &str) -> Result<TextComponent, ServerError> {
         serde_json::from_str(text)
             .map_err(|_| ServerError::DeTextComponent)
+    }
+}
+
+impl Default for TextComponent {
+    fn default() -> Self {
+        Self::new(String::new())
+    }
+}
+
+pub trait ReadWriteNBT<T>: DataReader {
+    fn read_nbt(&mut self) -> Result<T, ServerError>;
+    fn write_nbt(&mut self, val: &T) -> Result<(), ServerError>;
+}
+
+impl ReadWriteNBT<TextComponent> for Packet {
+    fn read_nbt(&mut self) -> Result<TextComponent, ServerError> {
+        let mut data = Vec::new();
+        let pos = self.get_ref().position();
+        self.get_mut().read_to_end(&mut data).map_err(|_| ServerError::DeTextComponent)?;
+        let (remaining, value) = craftflow_nbt::from_slice(&data).map_err(|_| ServerError::DeTextComponent)?;
+        self.get_mut().set_position(pos + (data.len() - remaining.len()) as u64);
+        Ok(value)
+    }
+    
+    fn write_nbt(&mut self, val: &TextComponent) -> Result<(), ServerError> {
+        craftflow_nbt::to_writer(self.get_mut(), val)
+            .map_err(|_| ServerError::SerTextComponent)?;
+        Ok(())
     }
 }
 

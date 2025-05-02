@@ -2,10 +2,10 @@ use std::{hash::Hash, net::{SocketAddr, TcpStream}, sync::{Arc, RwLock, RwLockWr
 
 use dashmap::DashMap;
 use itertools::Itertools;
-use rust_mc_proto::{MinecraftConnection, Packet};
+use rust_mc_proto::MinecraftConnection;
 use uuid::Uuid;
 
-use crate::{config::Config, data::ServerError, player::{ClientInfo, Handshake, PlayerInfo}};
+use crate::{config::Config, data::ServerError, event::{ConnectionState, Listener, PacketHandler}, player::{ClientInfo, Handshake, PlayerInfo, ProtocolHelper}};
 
 pub struct ServerContext {
     pub config: Arc<Config>,
@@ -90,11 +90,12 @@ impl ServerContext {
 
 pub struct ClientContext {
     pub server: Arc<ServerContext>,
-    pub conn: RwLock<MinecraftConnection<TcpStream>>,
     pub addr: SocketAddr,
-    pub handshake: RwLock<Option<Handshake>>,
-    pub client_info: RwLock<Option<ClientInfo>>,
-    pub player_info: RwLock<Option<PlayerInfo>>
+    conn: RwLock<MinecraftConnection<TcpStream>>,
+    handshake: RwLock<Option<Handshake>>,
+    client_info: RwLock<Option<ClientInfo>>,
+    player_info: RwLock<Option<PlayerInfo>>,
+    state: RwLock<ConnectionState>
 }
 
 impl PartialEq for ClientContext {
@@ -111,7 +112,6 @@ impl Hash for ClientContext {
 
 impl Eq for ClientContext {}
 
-
 impl ClientContext {
     pub fn new(
         server: Arc<ServerContext>, 
@@ -123,7 +123,8 @@ impl ClientContext {
             conn: RwLock::new(conn),
             handshake: RwLock::new(None),
             client_info: RwLock::new(None),
-            player_info: RwLock::new(None)
+            player_info: RwLock::new(None),
+            state: RwLock::new(ConnectionState::Handshake)
         }
     }
 
@@ -139,6 +140,18 @@ impl ClientContext {
         *self.player_info.write().unwrap() = Some(player_info);
     }
 
+    pub fn set_state(self: &Arc<Self>, state: ConnectionState) -> Result<(), ServerError> {
+        *self.state.write().unwrap() = state.clone();
+
+        for handler in self.server.packet_handlers(
+            |o| o.on_state_priority()
+        ).iter() {
+            handler.on_state(self.clone(), state.clone())?;
+        }
+
+        Ok(())
+    }
+
     pub fn handshake(self: &Arc<Self>) -> Option<Handshake> {
         self.handshake.read().unwrap().clone()
     }
@@ -151,60 +164,15 @@ impl ClientContext {
         self.player_info.read().unwrap().clone()
     }
 
+    pub fn state(self: &Arc<Self>) -> ConnectionState {
+        self.state.read().unwrap().clone()
+    }
+
     pub fn conn(self: &Arc<Self>) -> RwLockWriteGuard<'_, MinecraftConnection<TcpStream>> {
         self.conn.write().unwrap()
     }
-}
 
-pub trait Listener: Sync + Send {
-    fn on_status_priority(&self) -> i8 { 0 }
-    fn on_status(&self, _: Arc<ClientContext>, _: &mut String) -> Result<(), ServerError> { Ok(()) }
-}
-
-pub trait PacketHandler: Sync + Send {
-    fn on_incoming_packet_priority(&self) -> i8 { 0 }
-    fn on_incoming_packet(&self, _: Arc<ClientContext>, _: &mut Packet, _: ConnectionState) -> Result<(), ServerError> { Ok(()) }
-
-    fn on_outcoming_packet_priority(&self) -> i8 { 0 }
-    fn on_outcoming_packet(&self, _: Arc<ClientContext>, _: &mut Packet, _: ConnectionState) -> Result<(), ServerError> { Ok(()) }
-}
-
-#[derive(Debug)]
-pub enum ConnectionState {
-    Handshake,
-    Status,
-    Login,
-    Configuration,
-    Play
-}
-
-
-#[macro_export]
-macro_rules! call_handlers {
-    ($packet:expr, $client:ident, $state:ident, incoming) => { 
-        {
-            use crate::context::ConnectionState;
-            let mut packet = $packet;
-            for handler in $client.server.packet_handlers(
-                |o| o.on_incoming_packet_priority()
-            ).iter() {
-                handler.on_incoming_packet($client.clone(), &mut packet, ConnectionState::$state)?;
-            }
-            packet.get_mut().set_position(0);
-            packet
-        }
-    };
-    ($packet:expr, $client:ident, $state:ident, outcoming) => { 
-        {
-            use crate::context::ConnectionState;
-            let mut packet = $packet;
-            for handler in $client.server.packet_handlers(
-                |o| o.on_outcoming_packet_priority()
-            ).iter() {
-                handler.on_outcoming_packet($client.clone(), &mut packet, ConnectionState::$state)?;
-            }
-            packet.get_mut().set_position(0);
-            packet
-        }
-    };
+    pub fn protocol_helper(self: &Arc<Self>) -> ProtocolHelper {
+        ProtocolHelper::new(self.clone())
+    }
 }

@@ -1,7 +1,8 @@
 use std::{env::args, io::Read, net::TcpListener, path::PathBuf, sync::Arc, thread, time::Duration};
 
 use config::Config;
-use context::{ClientContext, ConnectionState, Listener, PacketHandler, ServerContext};
+use event::{ConnectionState, Listener, PacketHandler};
+use context::{ClientContext, ServerContext};
 use log::{debug, error, info};
 use player::{ClientInfo, Handshake, PlayerInfo};
 use rust_mc_proto::{DataReader, DataWriter, MinecraftConnection, Packet};
@@ -11,6 +12,7 @@ use pohuy::Pohuy;
 
 pub mod config;
 pub mod data;
+pub mod event;
 pub mod context;
 pub mod player;
 pub mod pohuy; 
@@ -194,7 +196,7 @@ fn handle_connection(
 	// Получение пакетов производится через client.conn(), 
 	// ВАЖНО: не помещать сам client.conn() в переменные, 
 	// он должен сразу убиваться иначе соединение гдето задедлочится
-	let mut packet = call_handlers!(client.conn().read_packet()?, client, Handshake, incoming);
+	let mut packet = trigger_packet!(client.conn().read_packet()?, client, Handshake, incoming);
 
 	if packet.id() != 0x00 { 
 		return Err(ServerError::UnknownPacket(format!("Неизвестный пакет рукопожатия"))); 
@@ -214,9 +216,11 @@ fn handle_connection(
 
 	match next_state {
 		1 => { // Тип подключения - статус
+			client.set_state(ConnectionState::Status)?; // Мы находимся в режиме Status
+
 			loop {
 				// Чтение запроса
-				let packet = call_handlers!(client.conn().read_packet()?, client, Status, incoming);
+				let packet = trigger_packet!(client.conn().read_packet()?, client, Status, incoming);
 
 				match packet.id() {
 					0x00 => { // Запрос статуса
@@ -241,10 +245,10 @@ fn handle_connection(
 						// Отправка статуса
 						packet.write_string(&status)?;
 
-						client.conn().write_packet(&call_handlers!(packet, client, Status, outcoming))?;
+						client.conn().write_packet(&trigger_packet!(packet, client, Status, outcoming))?;
 					},
 					0x01 => { // Пинг
-						client.conn().write_packet(&call_handlers!(packet, client, Status, outcoming))?; 
+						client.conn().write_packet(&trigger_packet!(packet, client, Status, outcoming))?; 
 						// Просто отправляем этот же пакет обратно
 						// ID такой-же, содержание тоже, так почему бы и нет?
 					},
@@ -255,10 +259,10 @@ fn handle_connection(
 			}
 		},
 		2 => { // Тип подключения - игра
-			// Мы находимся в режиме Login
+			client.set_state(ConnectionState::Login)?; // Мы находимся в режиме Login
 
 			// Читаем пакет Login Start
-			let mut packet = call_handlers!(client.conn().read_packet()?, client, Login, incoming);
+			let mut packet = trigger_packet!(client.conn().read_packet()?, client, Login, incoming);
 
 			let name = packet.read_string()?;
 			let uuid = packet.read_uuid()?;
@@ -274,29 +278,29 @@ fn handle_connection(
 
 			// Отправляем пакет Set Compression если сжатие указано
 			if let Some(threshold) = client.server.config.server.compression_threshold {
-				client.conn().write_packet(&call_handlers!(Packet::build(0x03, |p| p.write_usize_varint(threshold))?, client, Login, outcoming))?;
+				client.conn().write_packet(&trigger_packet!(Packet::build(0x03, |p| p.write_usize_varint(threshold))?, client, Login, outcoming))?;
 				client.conn().set_compression(Some(threshold)); // Устанавливаем сжатие на соединении
 			}
 
 			// Отправка пакета Login Success
-			client.conn().write_packet(&call_handlers!(Packet::build(0x02, |p| {
+			client.conn().write_packet(&trigger_packet!(Packet::build(0x02, |p| {
 				p.write_uuid(&uuid)?;
 				p.write_string(&name)?;
 				p.write_varint(0)
 			})?, client, Login, outcoming))?;
 
-			let packet = call_handlers!(client.conn().read_packet()?, client, Login, incoming);
+			let packet = trigger_packet!(client.conn().read_packet()?, client, Login, incoming);
 
 			if packet.id() != 0x03 {
 				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Login Acknowledged"))); 
 			}
 
-			// Мы перешли в режим Configuration
+			client.set_state(ConnectionState::Configuration)?; // Мы перешли в режим Configuration
 			
 			// Получение бренда клиента из Serverbound Plugin Message
 			// Identifier канала откуда берется бренд: minecraft:brand
 			let brand = loop {
-				let mut packet = call_handlers!(client.conn().read_packet()?, client, Configuration, incoming);
+				let mut packet = trigger_packet!(client.conn().read_packet()?, client, Configuration, incoming);
 
 				if packet.id() == 0x02 { // Пакет Serverbound Plugin Message
 					let identifier = packet.read_string()?;
@@ -316,7 +320,7 @@ fn handle_connection(
 
 			// debug!("brand: {brand}");
 
-			let mut packet = call_handlers!(client.conn().read_packet()?, client, Configuration, incoming);
+			let mut packet = trigger_packet!(client.conn().read_packet()?, client, Configuration, incoming);
 
 			// Пакет Client Information
 			if packet.id() != 0x00 { 
@@ -358,19 +362,19 @@ fn handle_connection(
 
 			// TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
 
-			client.conn().write_packet(&call_handlers!(Packet::empty(0x03), client, Configuration, outcoming))?;
+			client.conn().write_packet(&trigger_packet!(Packet::empty(0x03), client, Configuration, outcoming))?;
 
-			let packet = call_handlers!(client.conn().read_packet()?, client, Configuration, incoming);
+			let packet = trigger_packet!(client.conn().read_packet()?, client, Configuration, incoming);
 
 			if packet.id() != 0x03 {
 				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Acknowledge Finish Configuration"))); 
 			}
 
-			// Мы перешли в режим Play
+			client.set_state(ConnectionState::Play)?; // Мы перешли в режим Play
 
 			// Отключение игрока с сообщением
 			// Отправляет в формате NBT TAG_String (https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/NBT#Specification:string_tag)
-			client.conn().write_packet(&call_handlers!(Packet::build(0x1C, |p| {
+			client.conn().write_packet(&trigger_packet!(Packet::build(0x1C, |p| {
 				let message = "server is in developmenet lol".to_string();
 				p.write_byte(0x08)?; // NBT Type Name (TAG_String)
 				p.write_unsigned_short(message.len() as u16)?; // String length in unsigned short
