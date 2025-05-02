@@ -1,6 +1,6 @@
 use rust_mc_proto::Packet;
 
-use crate::{context::ClientContext, data::ServerError};
+use super::protocol::ConnectionState;
 
 #[macro_export]
 macro_rules! generate_handlers {
@@ -10,7 +10,7 @@ macro_rules! generate_handlers {
                 0
             }
 
-            fn [<on_ $name>](&self, _: std::sync::Arc<ClientContext> $(, _: $arg_ty)*) -> Result<(), ServerError> {
+            fn [<on_ $name>](&self, _: std::sync::Arc<crate::server::player::context::ClientContext> $(, _: $arg_ty)*) -> Result<(), crate::server::ServerError> {
                 Ok(())
             }
         }
@@ -26,7 +26,7 @@ macro_rules! trigger_packet {
                 for handler in $client.server.packet_handlers(
                     |o| o.[<on_ $bound _packet_priority>]()
                 ).iter() {
-                    handler.[<on_ $bound _packet>]($client.clone(), &mut packet, crate::event::ConnectionState::$state)?;
+                    handler.[<on_ $bound _packet>]($client.clone(), &mut packet, crate::server::protocol::ConnectionState::$state)?;
                 }
                 packet.get_mut().set_position(0);
                 packet
@@ -89,13 +89,4 @@ pub trait PacketHandler: Sync + Send {
     generate_handlers!(incoming_packet, &mut Packet, ConnectionState);
     generate_handlers!(outcoming_packet, &mut Packet, ConnectionState);
     generate_handlers!(state, ConnectionState);
-}
-
-#[derive(Debug, Clone)]
-pub enum ConnectionState {
-    Handshake,
-    Status,
-    Login,
-    Configuration,
-    Play
 }

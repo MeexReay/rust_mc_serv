@@ -1,44 +1,14 @@
-use std::{error::Error, fmt::Display, io::Read};
-use palette::{Hsl, IntoColor, Srgb};
-use serde::{Deserialize, Serialize};
+use std::io::Read;
 
-use rust_mc_proto::{DataReader, Packet, ProtocolError};
+use palette::{Hsl, IntoColor, Srgb};
+use rust_mc_proto::{DataReader, Packet};
+use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-// Ошибки сервера
-#[derive(Debug)]
-pub enum ServerError {
-    UnknownPacket(String),
-    Protocol(ProtocolError),
-    ConnectionClosed,
-    SerTextComponent,
-    DeTextComponent,
-    UnexpectedState
-}
+use crate::server::ServerError;
 
-impl Display for ServerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("{:?}", self))
-    }
-}
 
-impl Error for ServerError {}
 
-// Делаем чтобы ProtocolError мог переделываться в наш ServerError
-impl From<ProtocolError> for ServerError {
-    fn from(error: ProtocolError) -> ServerError {
-        match error {
-            // Если просто закрыто соединение, переделываем в нашу ошибку этого
-            ProtocolError::ConnectionClosedError => {
-                ServerError::ConnectionClosed
-            },
-            // Все остальное просто засовываем в обертку
-            error => {
-                ServerError::Protocol(error)
-            },
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[skip_serializing_none]
@@ -109,28 +79,6 @@ impl TextComponent {
 impl Default for TextComponent {
     fn default() -> Self {
         Self::new(String::new())
-    }
-}
-
-pub trait ReadWriteNBT<T>: DataReader {
-    fn read_nbt(&mut self) -> Result<T, ServerError>;
-    fn write_nbt(&mut self, val: &T) -> Result<(), ServerError>;
-}
-
-impl ReadWriteNBT<TextComponent> for Packet {
-    fn read_nbt(&mut self) -> Result<TextComponent, ServerError> {
-        let mut data = Vec::new();
-        let pos = self.get_ref().position();
-        self.get_mut().read_to_end(&mut data).map_err(|_| ServerError::DeTextComponent)?;
-        let (remaining, value) = craftflow_nbt::from_slice(&data).map_err(|_| ServerError::DeTextComponent)?;
-        self.get_mut().set_position(pos + (data.len() - remaining.len()) as u64);
-        Ok(value)
-    }
-    
-    fn write_nbt(&mut self, val: &TextComponent) -> Result<(), ServerError> {
-        craftflow_nbt::to_writer(self.get_mut(), val)
-            .map_err(|_| ServerError::SerTextComponent)?;
-        Ok(())
     }
 }
 
@@ -210,5 +158,27 @@ impl TextComponentBuilder {
             obfuscated: self.obfuscated, 
             extra: self.extra
         }
+    }
+}
+
+pub trait ReadWriteNBT<T>: DataReader {
+    fn read_nbt(&mut self) -> Result<T, ServerError>;
+    fn write_nbt(&mut self, val: &T) -> Result<(), ServerError>;
+}
+
+impl ReadWriteNBT<TextComponent> for Packet {
+    fn read_nbt(&mut self) -> Result<TextComponent, ServerError> {
+        let mut data = Vec::new();
+        let pos = self.get_ref().position();
+        self.get_mut().read_to_end(&mut data).map_err(|_| ServerError::DeTextComponent)?;
+        let (remaining, value) = craftflow_nbt::from_slice(&data).map_err(|_| ServerError::DeTextComponent)?;
+        self.get_mut().set_position(pos + (data.len() - remaining.len()) as u64);
+        Ok(value)
+    }
+    
+    fn write_nbt(&mut self, val: &TextComponent) -> Result<(), ServerError> {
+        craftflow_nbt::to_writer(self.get_mut(), val)
+            .map_err(|_| ServerError::SerTextComponent)?;
+        Ok(())
     }
 }

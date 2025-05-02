@@ -1,36 +1,11 @@
 use std::{io::Read, sync::Arc};
 
 use rust_mc_proto::{DataReader, DataWriter, Packet};
-use uuid::Uuid;
 
-use crate::{context::ClientContext, data::{ServerError, TextComponent, ReadWriteNBT}, event::ConnectionState};
+use crate::server::{data::text_component::{ReadWriteNBT, TextComponent}, protocol::ConnectionState, ServerError};
 
-#[derive(Clone)]
-pub struct Handshake {
-    pub protocol_version: i32,
-    pub server_address: String,
-    pub server_port: u16,
-}
+use super::context::ClientContext;
 
-#[derive(Clone)]
-pub struct ClientInfo {
-    pub brand: String,
-    pub locale: String,
-    pub view_distance: i8,
-    pub chat_mode: i32,
-    pub chat_colors: bool,
-    pub displayed_skin_parts: u8,
-    pub main_hand: i32,
-    pub enable_text_filtering: bool,
-    pub allow_server_listings: bool,
-    pub particle_status: i32
-}
-
-#[derive(Clone)]
-pub struct PlayerInfo {
-    pub name: String,
-    pub uuid: Uuid
-}
 
 pub struct ProtocolHelper {
     client: Arc<ClientContext>,
