@@ -76,7 +76,7 @@ impl PacketHandler for ExamplePacketHandler {
 		&self, 
 		client: Arc<ClientContext>, 
 		packet: &mut Packet, 
-		cancelled: &mut bool,
+		_: &mut bool,
 		state: ConnectionState
 	) -> Result<(), ServerError> {
 		debug!("{} -> S\t| 0x{:02x}\t| {:?}\t| {} bytes", client.addr.clone(), packet.id(), state, packet.len());
@@ -88,7 +88,7 @@ impl PacketHandler for ExamplePacketHandler {
 		&self, 
 		client: Arc<ClientContext>, 
 		packet: &mut Packet, 
-		cancelled: &mut bool,
+		_: &mut bool,
 		state: ConnectionState
 	) -> Result<(), ServerError> {
 		debug!("{} <- S\t| 0x{:02x}\t| {:?}\t| {} bytes", client.addr.clone(), packet.id(), state, packet.len());

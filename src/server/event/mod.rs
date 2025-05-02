@@ -88,7 +88,7 @@ macro_rules! trigger_event {
 
 pub trait Listener: Sync + Send {
     generate_handlers!(status, &mut String);
-    generate_handlers!(plugin_message, &mut String);
+    generate_handlers!(plugin_message, &str, &[u8]);
 }
 
 pub trait PacketHandler: Sync + Send {

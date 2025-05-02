@@ -1,10 +1,9 @@
 use std::{io::Read, sync::Arc};
 
 use super::{player::context::{ClientContext, ClientInfo, Handshake, PlayerInfo}, ServerError};
-use log::error;
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 
-use crate::{trigger_event, write_packet, read_packet};
+use crate::{read_packet, server::data::text_component::TextComponent, trigger_event, write_packet};
 
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
@@ -32,11 +31,6 @@ pub fn handle_connection(
 	let server_address = packet.read_string()?; // Получаем домен/адрес сервера к которому пытается подключиться клиент, например "play.example.com", а не айпи
 	let server_port = packet.read_unsigned_short()?; // Все тоже самое что и с адресом сервера и все потому же и за тем же
 	let next_state = packet.read_varint()?; // Тип подключения: 1 для получения статуса и пинга, 2 и 3 для обычного подключения
-
-	// debug!("protocol_version: {protocol_version}");
-	// debug!("server_address: {server_address}");
-	// debug!("server_port: {server_port}");
-	// debug!("next_state: {next_state}");
 
 	client.set_handshake(Handshake { protocol_version, server_address, server_port });
 
@@ -89,9 +83,6 @@ pub fn handle_connection(
 			let name = packet.read_string()?;
 			let uuid = packet.read_uuid()?;
 
-			// debug!("name: {name}");
-			// debug!("uuid: {uuid}");
-
 			client.set_player_info(PlayerInfo { name: name.clone(), uuid: uuid.clone() });
 
 			if client.server.config.server.online_mode {
@@ -133,14 +124,12 @@ pub fn handle_connection(
 					if identifier == "minecraft:brand" { 
 						break String::from_utf8_lossy(&data).to_string();
 					} else {
-						error!("unknown plugin message channel: {}", identifier);
+						trigger_event!(client, plugin_message, &identifier, &data);
 					}
 				} else {
 					return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Serverbound Plugin Message"))); 
 				};
 			};
-
-			// debug!("brand: {brand}");
 
 			let mut packet = read_packet!(client, Configuration);
 
@@ -149,7 +138,7 @@ pub fn handle_connection(
 				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Client Information"))); 
 			}
 
-			let locale = packet.read_string()?; // for example: ru_RU
+			let locale = packet.read_string()?; // for example: en_us
 			let view_distance = packet.read_signed_byte()?; // client-side render distance in chunks
 			let chat_mode = packet.read_varint()?; // 0: enabled, 1: commands only, 2: hidden. See Chat#Client chat mode for more information. 
 			let chat_colors = packet.read_boolean()?; // this settings does nothing on client but can be used on serverside
@@ -158,16 +147,6 @@ pub fn handle_connection(
 			let enable_text_filtering = packet.read_boolean()?; // filtering text for profanity, always false for offline mode
 			let allow_server_listings = packet.read_boolean()?; // allows showing player in server listings in status
 			let particle_status = packet.read_varint()?; // 0 for all, 1 for decreased, 2 for minimal
-
-			// debug!("locale: {locale}");
-			// debug!("view_distance: {view_distance}");
-			// debug!("chat_mode: {chat_mode}");
-			// debug!("chat_colors: {chat_colors}");
-			// debug!("displayed_skin_parts: {displayed_skin_parts}");
-			// debug!("main_hand: {main_hand}");
-			// debug!("enable_text_filtering: {enable_text_filtering}");
-			// debug!("allow_server_listings: {allow_server_listings}");
-			// debug!("particle_status: {particle_status}");
 
 			client.set_client_info(ClientInfo { 
 				brand, 
@@ -194,21 +173,26 @@ pub fn handle_connection(
 
 			client.set_state(ConnectionState::Play)?; // Мы перешли в режим Play
 
-			// Отключение игрока с сообщением
-			// Отправляет в формате NBT TAG_String (https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/NBT#Specification:string_tag)
-			write_packet!(client, Play, Packet::build(0x1C, |p| {
-				let message = "server is in developmenet lol".to_string();
-				p.write_byte(0x08)?; // NBT Type Name (TAG_String)
-				p.write_unsigned_short(message.len() as u16)?; // String length in unsigned short
-				p.write_bytes(message.as_bytes())
-			})?);
-
-			// TODO: Сделать отправку пакетов Play
+			// Дальше работаем с режимом игры
+			handle_play_state(client)?;
 		},
 		_ => {
 			return Err(ServerError::UnknownPacket(format!("Неизвестный NextState при рукопожатии"))); 
 		} // Тип подключения не рукопожатный
 	}
+
+	Ok(())
+}
+
+// Отдельная функция для работы с самой игрой
+pub fn handle_play_state(
+	client: Arc<ClientContext>, // Контекст клиента
+) -> Result<(), ServerError> { 
+
+	// Отключение игрока с сообщением
+	client.protocol_helper().disconnect(TextComponent::rainbow("server is in developement suka".to_string()))?;
+
+	// TODO: Сделать отправку пакетов Play
 
 	Ok(())
 }
