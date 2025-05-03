@@ -17,7 +17,7 @@ pub mod protocol;
 // Ошибки сервера
 #[derive(Debug)]
 pub enum ServerError {
-    UnknownPacket(String),   // Неизвестный пакет, в строке указана ситуация в которой он неизвестен
+    UnexpectedPacket,        // Неожиданный пакет
     Protocol(ProtocolError), // Ошибка в протоколе при работе с rust_mc_proto
     ConnectionClosed,        // Соединение закрыто, единственная ошибка которая не логируется у handle_connection
     SerTextComponent,        // Ошибка при сериализации текст-компонента

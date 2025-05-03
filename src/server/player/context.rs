@@ -107,7 +107,7 @@ impl ClientContext {
         Ok(())
     }
 
-    pub fn read_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
+    pub fn read_any_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
         let state = self.state();
 
         let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
@@ -124,6 +124,15 @@ impl ClientContext {
             if !cancelled {
                 break Ok(packet);
             }
+        }
+    }
+
+    pub fn read_packet(self: &Arc<Self>, id: u8) -> Result<Packet, ServerError> {
+        let packet = self.read_any_packet()?;
+        if packet.id() != id {
+            Err(ServerError::UnexpectedPacket)
+        } else {
+            Ok(packet)
         }
     }
 
