@@ -1,4 +1,4 @@
-use std::{io::Read, sync::Arc};
+use std::{io::Read, sync::Arc, time::{Duration, SystemTime}};
 
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 
@@ -24,6 +24,51 @@ impl ProtocolHelper {
         Self {
             state: client.state(),
             client
+        }
+    }
+
+    /// Leave from Configuration to Play state
+    pub fn leave_configuration(&self) -> Result<(), ServerError> {
+        match self.state {
+            ConnectionState::Configuration => {
+                self.client.conn().write_packet(&Packet::empty(0x03))?;
+                self.client.conn().read_packet()?;
+                self.client.set_state(ConnectionState::Play)?;
+                Ok(())
+            },
+            _ => Err(ServerError::UnexpectedState)
+        }
+    }
+
+    /// Enter to Configuration from Play state
+    pub fn enter_configuration(&self) -> Result<(), ServerError> {
+        match self.state {
+            ConnectionState::Play => {
+                self.client.conn().write_packet(&Packet::empty(0x6F))?;
+                self.client.conn().read_packet()?;
+                self.client.set_state(ConnectionState::Configuration)?;
+                Ok(())
+            },
+            _ => Err(ServerError::UnexpectedState)
+        }
+    }
+
+    /// Enter to Configuration from Play state
+    pub fn ping(&self) -> Result<Duration, ServerError> {
+        match self.state {
+            ConnectionState::Play => {
+                let time = SystemTime::now();
+                self.client.conn().write_packet(&Packet::empty(0x36))?;
+                self.client.conn().read_packet()?;
+                Ok(SystemTime::now().duration_since(time).unwrap())
+            },
+            ConnectionState::Configuration => {
+                let time = SystemTime::now();
+                self.client.conn().write_packet(&Packet::empty(0x05))?;
+                self.client.conn().read_packet()?;
+                Ok(SystemTime::now().duration_since(time).unwrap())
+            },
+            _ => Err(ServerError::UnexpectedState)
         }
     }
     
