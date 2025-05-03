@@ -1,6 +1,6 @@
-use std::{hash::Hash, net::{SocketAddr, TcpStream}, sync::{Arc, RwLock, RwLockWriteGuard}};
+use std::{hash::Hash, net::{SocketAddr, TcpStream}, sync::{Arc, RwLock}};
 
-use rust_mc_proto::MinecraftConnection;
+use rust_mc_proto::{MinecraftConnection, Packet};
 use uuid::Uuid;
 
 use crate::server::{context::ServerContext, protocol::ConnectionState, ServerError};
@@ -91,8 +91,48 @@ impl ClientContext {
         self.state.read().unwrap().clone()
     }
 
-    pub fn conn(self: &Arc<Self>) -> RwLockWriteGuard<'_, MinecraftConnection<TcpStream>> {
-        self.conn.write().unwrap()
+    pub fn write_packet(self: &Arc<Self>, packet: &Packet) -> Result<(), ServerError> {
+        let state = self.state();
+        let mut packet = packet.clone();
+        let mut cancelled = false;
+        for handler in self.server.packet_handlers(
+            |o| o.on_outcoming_packet_priority()
+        ).iter() {
+            handler.on_outcoming_packet(self.clone(), &mut packet, &mut cancelled, state.clone())?;
+            packet.get_mut().set_position(0);
+        }
+        if !cancelled {
+            self.conn.write().unwrap().write_packet(&packet)?;
+        }
+        Ok(())
+    }
+
+    pub fn read_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
+        let state = self.state();
+
+        let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
+
+        loop {
+            let mut packet = conn.read_packet()?;
+            let mut cancelled = false;
+            for handler in self.server.packet_handlers(
+                |o| o.on_incoming_packet_priority()
+            ).iter() {
+                handler.on_incoming_packet(self.clone(), &mut packet, &mut cancelled, state.clone())?;
+                packet.get_mut().set_position(0);
+            }
+            if !cancelled {
+                break Ok(packet);
+            }
+        }
+    }
+
+    pub fn close(self: &Arc<Self>) {
+        self.conn.write().unwrap().close();
+    }
+
+    pub fn set_compression(self: &Arc<Self>, threshold: Option<usize>) {
+        self.conn.write().unwrap().set_compression(threshold);
     }
 
     pub fn protocol_helper(self: &Arc<Self>) -> ProtocolHelper {

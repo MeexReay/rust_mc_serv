@@ -31,8 +31,8 @@ impl ProtocolHelper {
     pub fn leave_configuration(&self) -> Result<(), ServerError> {
         match self.state {
             ConnectionState::Configuration => {
-                self.client.conn().write_packet(&Packet::empty(0x03))?;
-                self.client.conn().read_packet()?;
+                self.client.write_packet(&Packet::empty(0x03))?;
+                self.client.read_packet()?;
                 self.client.set_state(ConnectionState::Play)?;
                 Ok(())
             },
@@ -44,8 +44,8 @@ impl ProtocolHelper {
     pub fn enter_configuration(&self) -> Result<(), ServerError> {
         match self.state {
             ConnectionState::Play => {
-                self.client.conn().write_packet(&Packet::empty(0x6F))?;
-                self.client.conn().read_packet()?;
+                self.client.write_packet(&Packet::empty(0x6F))?;
+                self.client.read_packet()?;
                 self.client.set_state(ConnectionState::Configuration)?;
                 Ok(())
             },
@@ -58,14 +58,14 @@ impl ProtocolHelper {
         match self.state {
             ConnectionState::Play => {
                 let time = SystemTime::now();
-                self.client.conn().write_packet(&Packet::empty(0x36))?;
-                self.client.conn().read_packet()?;
+                self.client.write_packet(&Packet::empty(0x36))?;
+                self.client.read_packet()?;
                 Ok(SystemTime::now().duration_since(time).unwrap())
             },
             ConnectionState::Configuration => {
                 let time = SystemTime::now();
-                self.client.conn().write_packet(&Packet::empty(0x05))?;
-                self.client.conn().read_packet()?;
+                self.client.write_packet(&Packet::empty(0x05))?;
+                self.client.read_packet()?;
                 Ok(SystemTime::now().duration_since(time).unwrap())
             },
             _ => Err(ServerError::UnexpectedState)
@@ -89,11 +89,11 @@ impl ProtocolHelper {
                 packet
             },
             _ => {
-                self.client.conn().close();
+                self.client.close();
                 return Ok(())
             },
         };
-        self.client.conn().write_packet(&packet)?;
+        self.client.write_packet(&packet)?;
         Ok(())
     }
 
@@ -103,9 +103,9 @@ impl ProtocolHelper {
             ConnectionState::Configuration => {
                 let mut packet = Packet::empty(0x00);
                 packet.write_string(id)?;
-                self.client.conn().write_packet(&packet)?;
+                self.client.write_packet(&packet)?;
 
-                let mut packet = self.client.conn().read_packet()?;
+                let mut packet = self.client.read_packet()?;
                 packet.read_string()?;
                 let data = if packet.read_boolean()? {
                     let n = packet.read_usize_varint()?;
@@ -128,9 +128,9 @@ impl ProtocolHelper {
                 packet.write_varint(id)?;
                 packet.write_string(channel)?;
                 packet.write_bytes(data)?;
-                self.client.conn().write_packet(&packet)?;
+                self.client.write_packet(&packet)?;
 
-                let mut packet = self.client.conn().read_packet()?;
+                let mut packet = self.client.read_packet()?;
                 let identifier = packet.read_varint()?;
                 let data = if packet.read_boolean()? {
                     let mut data = Vec::new();
@@ -154,7 +154,7 @@ impl ProtocolHelper {
         };
         packet.write_string(channel)?;
         packet.write_bytes(data)?;
-        self.client.conn().write_packet(&packet)?;
+        self.client.write_packet(&packet)?;
         Ok(())
     }
 }

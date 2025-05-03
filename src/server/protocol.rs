@@ -3,7 +3,7 @@ use std::{io::Read, sync::Arc};
 use super::{player::context::{ClientContext, ClientInfo, Handshake, PlayerInfo}, ServerError};
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 
-use crate::{read_packet, server::data::text_component::TextComponent, trigger_event, write_packet};
+use crate::{server::data::text_component::TextComponent, trigger_event};
 
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
@@ -21,7 +21,7 @@ pub fn handle_connection(
 	// Получение пакетов производится через client.conn(), 
 	// ВАЖНО: не помещать сам client.conn() в переменные, 
 	// он должен сразу убиваться иначе соединение гдето задедлочится
-	let mut packet = read_packet!(client, Handshake);
+	let mut packet = client.read_packet()?;
 
 	if packet.id() != 0x00 { 
 		return Err(ServerError::UnknownPacket(format!("Неизвестный пакет рукопожатия"))); 
@@ -40,7 +40,7 @@ pub fn handle_connection(
 
 			loop {
 				// Чтение запроса
-				let packet = read_packet!(client, Status);
+				let packet = client.read_packet()?;
 
 				match packet.id() {
 					0x00 => { // Запрос статуса
@@ -61,10 +61,10 @@ pub fn handle_connection(
 						// Отправка статуса
 						packet.write_string(&status)?;
 
-						write_packet!(client, Status, packet);
+						client.write_packet(&packet)?;
 					},
 					0x01 => { // Пинг
-						write_packet!(client, Status, packet); 
+						client.write_packet(&packet)?; 
 						// Просто отправляем этот же пакет обратно
 						// ID такой-же, содержание тоже, так почему бы и нет?
 					},
@@ -78,7 +78,7 @@ pub fn handle_connection(
 			client.set_state(ConnectionState::Login)?; // Мы находимся в режиме Login
 
 			// Читаем пакет Login Start
-			let mut packet = read_packet!(client, Login);
+			let mut packet = client.read_packet()?;
 
 			let name = packet.read_string()?;
 			let uuid = packet.read_uuid()?;
@@ -91,18 +91,18 @@ pub fn handle_connection(
 
 			// Отправляем пакет Set Compression если сжатие указано
 			if let Some(threshold) = client.server.config.server.compression_threshold {
-				write_packet!(client, Login, Packet::build(0x03, |p| p.write_usize_varint(threshold))?);
-				client.conn().set_compression(Some(threshold)); // Устанавливаем сжатие на соединении
+				client.write_packet(&Packet::build(0x03, |p| p.write_usize_varint(threshold))?)?;
+				client.set_compression(Some(threshold)); // Устанавливаем сжатие на соединении
 			}
 
 			// Отправка пакета Login Success
-			write_packet!(client, Login, Packet::build(0x02, |p| {
+			client.write_packet(&Packet::build(0x02, |p| {
 				p.write_uuid(&uuid)?;
 				p.write_string(&name)?;
 				p.write_varint(0)
-			})?);
+			})?)?;
 
-			let packet = read_packet!(client, Login);
+			let packet = client.read_packet()?;
 
 			if packet.id() != 0x03 {
 				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Login Acknowledged"))); 
@@ -113,7 +113,7 @@ pub fn handle_connection(
 			// Получение бренда клиента из Serverbound Plugin Message
 			// Identifier канала откуда берется бренд: minecraft:brand
 			let brand = loop {
-				let mut packet = read_packet!(client, Configuration);
+				let mut packet = client.read_packet()?;
 
 				if packet.id() == 0x02 { // Пакет Serverbound Plugin Message
 					let identifier = packet.read_string()?;
@@ -131,7 +131,7 @@ pub fn handle_connection(
 				};
 			};
 
-			let mut packet = read_packet!(client, Configuration);
+			let mut packet = client.read_packet()?;
 
 			// Пакет Client Information
 			if packet.id() != 0x00 { 
@@ -163,9 +163,9 @@ pub fn handle_connection(
 
 			// TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
 
-			write_packet!(client, Configuration, Packet::empty(0x03));
+			client.write_packet(&Packet::empty(0x03))?;
 
-			let packet = read_packet!(client, Configuration);
+			let packet = client.read_packet()?;
 
 			if packet.id() != 0x03 {
 				return Err(ServerError::UnknownPacket(format!("Неизвестный пакет при ожидании Acknowledge Finish Configuration"))); 

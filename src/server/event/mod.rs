@@ -17,56 +17,6 @@ macro_rules! generate_handlers {
     };
 }
 
-/// Отправляет пакет клиенту и проходит по пакет ханлдерам
-/// Пример использования:
-/// 
-///     write_packet!(client, Handshake, packet);
-/// 
-/// `Handshake` это режим подключения (типы ConnectionState)
-#[macro_export]
-macro_rules! write_packet {
-    ($client:expr, $state:ident, $packet:expr) => { 
-        {
-            let mut packet = $packet;
-            let mut cancelled = false;
-            for handler in $client.server.packet_handlers(
-                |o| o.on_outcoming_packet_priority()
-            ).iter() {
-                handler.on_outcoming_packet($client.clone(), &mut packet, &mut cancelled, crate::server::protocol::ConnectionState::$state)?;
-                packet.get_mut().set_position(0);
-            }
-            if !cancelled {
-                $client.conn().write_packet(&packet)?;
-            }
-        }
-    };
-}
-
-/// Читает пакет от клиента и проходит по пакет ханлдерам
-/// Пример использования:
-/// 
-///     let packet = read_packet!(client, Handshake);
-/// 
-/// `Handshake` это режим подключения (типы ConnectionState)
-#[macro_export]
-macro_rules! read_packet {
-    ($client:expr, $state:ident) => { 
-        loop {
-            let mut packet = $client.conn().read_packet()?;
-            let mut cancelled = false;
-            for handler in $client.server.packet_handlers(
-                |o| o.on_incoming_packet_priority()
-            ).iter() {
-                handler.on_incoming_packet($client.clone(), &mut packet, &mut cancelled, crate::server::protocol::ConnectionState::$state)?;
-                packet.get_mut().set_position(0);
-            }
-            if !cancelled {
-                break packet;
-            }
-        }
-    };
-}
-
 /// Пример использования:
 /// 
 ///     trigger_event!(client, status, &mut response, state);
