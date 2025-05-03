@@ -9,7 +9,6 @@ use crate::server::ServerError;
 
 use super::ReadWriteNBT;
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[skip_serializing_none]
 pub struct TextComponent {
@@ -34,7 +33,7 @@ impl TextComponent {
             underlined: None,
             strikethrough: None,
             obfuscated: None,
-            extra: None
+            extra: None,
         }
     }
 
@@ -43,7 +42,8 @@ impl TextComponent {
             return TextComponent::new(text);
         }
 
-        let children = text.char_indices()
+        let children = text
+            .char_indices()
             .map(|(i, c)| {
                 let hue = (i as f32) / (text.chars().count() as f32) * 360.0;
                 let hsl = Hsl::new(hue, 1.0, 0.5);
@@ -56,7 +56,7 @@ impl TextComponent {
                 component
             })
             .collect::<Vec<TextComponent>>();
-        
+
         let mut parent = children[0].clone();
         parent.extra = Some(children[1..].to_vec());
         parent
@@ -67,13 +67,11 @@ impl TextComponent {
     }
 
     pub fn as_json(self) -> Result<String, ServerError> {
-        serde_json::to_string(&self)
-            .map_err(|_| ServerError::SerTextComponent)
+        serde_json::to_string(&self).map_err(|_| ServerError::SerTextComponent)
     }
 
     pub fn from_json(text: &str) -> Result<TextComponent, ServerError> {
-        serde_json::from_str(text)
-            .map_err(|_| ServerError::DeTextComponent)
+        serde_json::from_str(text).map_err(|_| ServerError::DeTextComponent)
     }
 }
 
@@ -149,15 +147,15 @@ impl TextComponentBuilder {
     }
 
     pub fn build(self) -> TextComponent {
-        TextComponent { 
-            text: self.text, 
-            color: self.color, 
-            bold: self.bold, 
-            italic: self.italic, 
-            underlined: self.underlined, 
-            strikethrough: self.strikethrough, 
-            obfuscated: self.obfuscated, 
-            extra: self.extra
+        TextComponent {
+            text: self.text,
+            color: self.color,
+            bold: self.bold,
+            italic: self.italic,
+            underlined: self.underlined,
+            strikethrough: self.strikethrough,
+            obfuscated: self.obfuscated,
+            extra: self.extra,
         }
     }
 }
@@ -167,15 +165,18 @@ impl ReadWriteNBT<TextComponent> for Packet {
     fn read_nbt(&mut self) -> Result<TextComponent, ServerError> {
         let mut data = Vec::new();
         let pos = self.get_ref().position();
-        self.get_mut().read_to_end(&mut data).map_err(|_| ServerError::DeTextComponent)?;
-        let (remaining, value) = craftflow_nbt::from_slice(&data).map_err(|_| ServerError::DeTextComponent)?;
-        self.get_mut().set_position(pos + (data.len() - remaining.len()) as u64);
+        self.get_mut()
+            .read_to_end(&mut data)
+            .map_err(|_| ServerError::DeTextComponent)?;
+        let (remaining, value) =
+            craftflow_nbt::from_slice(&data).map_err(|_| ServerError::DeTextComponent)?;
+        self.get_mut()
+            .set_position(pos + (data.len() - remaining.len()) as u64);
         Ok(value)
     }
-    
+
     fn write_nbt(&mut self, val: &TextComponent) -> Result<(), ServerError> {
-        craftflow_nbt::to_writer(self.get_mut(), val)
-            .map_err(|_| ServerError::SerTextComponent)?;
+        craftflow_nbt::to_writer(self.get_mut(), val).map_err(|_| ServerError::SerTextComponent)?;
         Ok(())
     }
 }

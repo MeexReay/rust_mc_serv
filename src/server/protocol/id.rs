@@ -1,8 +1,8 @@
 /*
 
- Generated with parse_ids.py 
+Generated with parse_ids.py
 
- */
+*/
 
 pub mod clientbound {
     pub mod status {
@@ -172,7 +172,6 @@ pub mod clientbound {
         pub const CUSTOM_REPORT_DETAILS: u8 = 0x81;
         pub const SERVER_LINKS: u8 = 0x82;
     }
-
 }
 
 pub mod serverbound {
@@ -270,6 +269,4 @@ pub mod serverbound {
         pub const USE_ITEM_ON: u8 = 0x3E;
         pub const USE_ITEM: u8 = 0x3F;
     }
-
 }
-

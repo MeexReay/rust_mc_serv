@@ -8,10 +8,10 @@ use protocol::handler::handle_connection;
 use rust_mc_proto::{MinecraftConnection, ProtocolError};
 
 pub mod config;
+pub mod context;
 pub mod data;
 pub mod event;
 pub mod player;
-pub mod context;
 pub mod protocol;
 
 // Ошибки сервера
@@ -19,11 +19,11 @@ pub mod protocol;
 pub enum ServerError {
     UnexpectedPacket,        // Неожиданный пакет
     Protocol(ProtocolError), // Ошибка в протоколе при работе с rust_mc_proto
-    ConnectionClosed,        // Соединение закрыто, единственная ошибка которая не логируется у handle_connection
-    SerTextComponent,        // Ошибка при сериализации текст-компонента
-    DeTextComponent,         // Ошибка при десериализации текст-компонента
-    UnexpectedState,         // Указывает на то что этот пакет не может быть отправлен в данном режиме (в основном через ProtocolHelper)
-    Other(String)            // Другая ошибка, либо очень специфичная, либо хз, лучше не использовать и создавать новое поле ошибки
+    ConnectionClosed, // Соединение закрыто, единственная ошибка которая не логируется у handle_connection
+    SerTextComponent, // Ошибка при сериализации текст-компонента
+    DeTextComponent,  // Ошибка при десериализации текст-компонента
+    UnexpectedState, // Указывает на то что этот пакет не может быть отправлен в данном режиме (в основном через ProtocolHelper)
+    Other(String), // Другая ошибка, либо очень специфичная, либо хз, лучше не использовать и создавать новое поле ошибки
 }
 
 impl Display for ServerError {
@@ -39,36 +39,39 @@ impl From<ProtocolError> for ServerError {
     fn from(error: ProtocolError) -> ServerError {
         match error {
             // Если просто закрыто соединение, переделываем в нашу ошибку этого
-            ProtocolError::ConnectionClosedError => {
-                ServerError::ConnectionClosed
-            },
+            ProtocolError::ConnectionClosedError => ServerError::ConnectionClosed,
             // Все остальное просто засовываем в обертку
-            error => {
-                ServerError::Protocol(error)
-            },
+            error => ServerError::Protocol(error),
         }
     }
 }
 
 pub fn start_server(server: Arc<ServerContext>) {
     // Биндим сервер где надо
-	let Ok(listener) = TcpListener::bind(&server.config.bind.host) else {
-        error!("Не удалось забиндить сервер на {}", &server.config.bind.host); 
+    let Ok(listener) = TcpListener::bind(&server.config.bind.host) else {
+        error!(
+            "Не удалось забиндить сервер на {}",
+            &server.config.bind.host
+        );
         return;
     };
 
-    info!("Сервер запущен на {}", &server.config.bind.host); 
+    info!("Сервер запущен на {}", &server.config.bind.host);
 
     while let Ok((stream, addr)) = listener.accept() {
         let server = server.clone();
 
-        thread::spawn(move || { 
+        thread::spawn(move || {
             info!("Подключение: {}", addr);
 
             // Установка таймаутов на чтение и запись
             // По умолчанию пусть будет 5 секунд, надо будет сделать настройку через конфиг
-            stream.set_read_timeout(Some(Duration::from_secs(server.config.bind.timeout))).ignore();
-            stream.set_write_timeout(Some(Duration::from_secs(server.config.bind.timeout))).ignore();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(server.config.bind.timeout)))
+                .ignore();
+            stream
+                .set_write_timeout(Some(Duration::from_secs(server.config.bind.timeout)))
+                .ignore();
 
             // Оборачиваем стрим в майнкрафт конекшн лично для нашего удовольствия
             let conn = MinecraftConnection::new(stream);
@@ -84,11 +87,11 @@ pub fn start_server(server: Arc<ServerContext>) {
             // Обработка подключения
             // Если ошибка -> выводим
             match handle_connection(client.clone()) {
-                Ok(_) => {},
-                Err(ServerError::ConnectionClosed) => {},
+                Ok(_) => {}
+                Err(ServerError::ConnectionClosed) => {}
                 Err(error) => {
                     error!("Ошибка подключения: {error:?}");
-                },
+                }
             };
 
             // Удаляем клиента из списка клиентов

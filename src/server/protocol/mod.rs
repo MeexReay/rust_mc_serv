@@ -1,7 +1,6 @@
+pub mod handler;
 pub mod id;
 pub mod play;
-pub mod handler;
-
 
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
@@ -9,6 +8,5 @@ pub enum ConnectionState {
     Status,
     Login,
     Configuration,
-    Play
+    Play,
 }
-

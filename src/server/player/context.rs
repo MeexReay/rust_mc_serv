@@ -1,9 +1,13 @@
-use std::{hash::Hash, net::{SocketAddr, TcpStream}, sync::{Arc, RwLock}};
+use std::{
+    hash::Hash,
+    net::{SocketAddr, TcpStream},
+    sync::{Arc, RwLock},
+};
 
 use rust_mc_proto::{MinecraftConnection, Packet};
 use uuid::Uuid;
 
-use crate::server::{context::ServerContext, protocol::ConnectionState, ServerError};
+use crate::server::{ServerError, context::ServerContext, protocol::ConnectionState};
 
 use super::helper::ProtocolHelper;
 
@@ -16,7 +20,7 @@ pub struct ClientContext {
     handshake: RwLock<Option<Handshake>>,
     client_info: RwLock<Option<ClientInfo>>,
     player_info: RwLock<Option<PlayerInfo>>,
-    state: RwLock<ConnectionState>
+    state: RwLock<ConnectionState>,
 }
 
 // Реализуем сравнение через адрес
@@ -36,10 +40,7 @@ impl Hash for ClientContext {
 impl Eq for ClientContext {}
 
 impl ClientContext {
-    pub fn new(
-        server: Arc<ServerContext>, 
-        conn: MinecraftConnection<TcpStream>
-    ) -> ClientContext {
+    pub fn new(server: Arc<ServerContext>, conn: MinecraftConnection<TcpStream>) -> ClientContext {
         ClientContext {
             server,
             addr: conn.get_ref().peer_addr().unwrap(),
@@ -47,7 +48,7 @@ impl ClientContext {
             handshake: RwLock::new(None),
             client_info: RwLock::new(None),
             player_info: RwLock::new(None),
-            state: RwLock::new(ConnectionState::Handshake)
+            state: RwLock::new(ConnectionState::Handshake),
         }
     }
 
@@ -66,9 +67,11 @@ impl ClientContext {
     pub fn set_state(self: &Arc<Self>, state: ConnectionState) -> Result<(), ServerError> {
         *self.state.write().unwrap() = state.clone();
 
-        for handler in self.server.packet_handlers(
-            |o| o.on_state_priority()
-        ).iter() {
+        for handler in self
+            .server
+            .packet_handlers(|o| o.on_state_priority())
+            .iter()
+        {
             handler.on_state(self.clone(), state.clone())?;
         }
 
@@ -95,10 +98,17 @@ impl ClientContext {
         let state = self.state();
         let mut packet = packet.clone();
         let mut cancelled = false;
-        for handler in self.server.packet_handlers(
-            |o| o.on_outcoming_packet_priority()
-        ).iter() {
-            handler.on_outcoming_packet(self.clone(), &mut packet, &mut cancelled, state.clone())?;
+        for handler in self
+            .server
+            .packet_handlers(|o| o.on_outcoming_packet_priority())
+            .iter()
+        {
+            handler.on_outcoming_packet(
+                self.clone(),
+                &mut packet,
+                &mut cancelled,
+                state.clone(),
+            )?;
             packet.get_mut().set_position(0);
         }
         if !cancelled {
@@ -115,10 +125,17 @@ impl ClientContext {
         loop {
             let mut packet = conn.read_packet()?;
             let mut cancelled = false;
-            for handler in self.server.packet_handlers(
-                |o| o.on_incoming_packet_priority()
-            ).iter() {
-                handler.on_incoming_packet(self.clone(), &mut packet, &mut cancelled, state.clone())?;
+            for handler in self
+                .server
+                .packet_handlers(|o| o.on_incoming_packet_priority())
+                .iter()
+            {
+                handler.on_incoming_packet(
+                    self.clone(),
+                    &mut packet,
+                    &mut cancelled,
+                    state.clone(),
+                )?;
                 packet.get_mut().set_position(0);
             }
             if !cancelled {
@@ -167,11 +184,11 @@ pub struct ClientInfo {
     pub main_hand: i32,
     pub enable_text_filtering: bool,
     pub allow_server_listings: bool,
-    pub particle_status: i32
+    pub particle_status: i32,
 }
 
 #[derive(Clone)]
 pub struct PlayerInfo {
     pub name: String,
-    pub uuid: Uuid
+    pub uuid: Uuid,
 }

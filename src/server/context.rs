@@ -4,7 +4,11 @@ use dashmap::DashMap;
 use itertools::Itertools;
 use uuid::Uuid;
 
-use super::{config::Config, event::{Listener, PacketHandler}, player::context::ClientContext};
+use super::{
+    config::Config,
+    event::{Listener, PacketHandler},
+    player::context::ClientContext,
+};
 
 // Контекст сервера
 // Должен быть обернут в Arc для передачи между потоками
@@ -12,7 +16,7 @@ pub struct ServerContext {
     pub config: Arc<Config>,
     pub clients: DashMap<SocketAddr, Arc<ClientContext>>,
     listeners: Vec<Box<dyn Listener>>,
-    handlers: Vec<Box<dyn PacketHandler>>
+    handlers: Vec<Box<dyn PacketHandler>>,
 }
 
 impl ServerContext {
@@ -21,12 +25,13 @@ impl ServerContext {
             config,
             listeners: Vec::new(),
             handlers: Vec::new(),
-            clients: DashMap::new()
+            clients: DashMap::new(),
         }
     }
 
     pub fn get_player_by_uuid(self: &Arc<Self>, uuid: Uuid) -> Option<Arc<ClientContext>> {
-        self.clients.iter()
+        self.clients
+            .iter()
             .find(|o| {
                 let info = o.player_info();
                 if let Some(info) = info {
@@ -39,7 +44,8 @@ impl ServerContext {
     }
 
     pub fn get_player_by_name(self: &Arc<Self>, name: &str) -> Option<Arc<ClientContext>> {
-        self.clients.iter()
+        self.clients
+            .iter()
             .find(|o| {
                 let info = o.player_info();
                 if let Some(info) = info {
@@ -52,7 +58,8 @@ impl ServerContext {
     }
 
     pub fn players(self: &Arc<Self>) -> Vec<Arc<ClientContext>> {
-        self.clients.iter()
+        self.clients
+            .iter()
             .filter(|o| o.player_info().is_some())
             .map(|o| o.clone())
             .collect()
@@ -66,24 +73,18 @@ impl ServerContext {
         self.listeners.push(listener);
     }
 
-    pub fn packet_handlers<F, K>(
-        self: &Arc<Self>, 
-        sort_by: F
-    ) -> Vec<&Box<dyn PacketHandler>>
-    where 
+    pub fn packet_handlers<F, K>(self: &Arc<Self>, sort_by: F) -> Vec<&Box<dyn PacketHandler>>
+    where
         K: Ord,
-        F: FnMut(&&Box<dyn PacketHandler>) -> K 
+        F: FnMut(&&Box<dyn PacketHandler>) -> K,
     {
         self.handlers.iter().sorted_by_key(sort_by).collect_vec()
     }
 
-    pub fn listeners<F, K>(
-        self: &Arc<Self>, 
-        sort_by: F
-    ) -> Vec<&Box<dyn Listener>>
-    where 
+    pub fn listeners<F, K>(self: &Arc<Self>, sort_by: F) -> Vec<&Box<dyn Listener>>
+    where
         K: Ord,
-        F: FnMut(&&Box<dyn Listener>) -> K 
+        F: FnMut(&&Box<dyn Listener>) -> K,
     {
         self.listeners.iter().sorted_by_key(sort_by).collect_vec()
     }

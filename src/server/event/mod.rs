@@ -18,7 +18,7 @@ macro_rules! generate_handlers {
 }
 
 /// Пример использования:
-/// 
+///
 ///     trigger_event!(client, status, &mut response, state);
 #[macro_export]
 macro_rules! trigger_event {
