@@ -1,14 +1,50 @@
 use std::{collections::HashMap, sync::Arc};
 
 use craftflow_nbt::DynNBT;
+use log::debug;
 use rust_mc_proto::{DataWriter, Packet};
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::server::{
     data::ReadWriteNBT, player::context::ClientContext, ServerError
 };
 
 use super::id::{clientbound::{self, configuration::REGISTRY_DATA}, serverbound};
+
+pub fn send_registry_data(
+    client: Arc<ClientContext>,
+) -> Result<(), ServerError> {
+    let registry_data = include_str!("registry_data.json");
+    let registry_data: Value = serde_json::from_str(registry_data).unwrap();
+    let registry_data = registry_data.as_object().unwrap();
+
+    for (registry_name, registry_data) in registry_data {
+        let registry_data = registry_data.as_object().unwrap();
+
+        let mut packet = Packet::empty(clientbound::configuration::REGISTRY_DATA);
+        packet.write_string(registry_name)?;
+
+        packet.write_usize_varint(registry_data.len())?;
+
+        debug!("sending registry: {registry_name}");
+
+        for (key, value) in registry_data {
+            packet.write_string(key)?;
+            packet.write_boolean(true)?;
+
+            let mut data = Vec::new();
+            craftflow_nbt::to_writer(&mut data, value).unwrap();
+
+            debug!("- {key}");
+            
+            packet.write_bytes(&data)?;
+        }
+        
+        client.write_packet(&packet)?;
+    }
+
+    Ok(())
+}
 
 pub fn handle_configuration_state(
     client: Arc<ClientContext>, // Контекст клиента
@@ -22,47 +58,7 @@ pub fn handle_configuration_state(
 	client.write_packet(&p)?;
 	client.read_packet(serverbound::configuration::KNOWN_PACKS)?;
 
-	let mut data = Vec::new();
-    craftflow_nbt::to_writer(&mut data, &json!(
-        {
-            "ambient_light": 0.0,
-            "bed_works": 1,
-            "coordinate_scale": 1.0,
-            "effects": "minecraft:overworld",
-            "has_ceiling": 0,
-            "has_raids": 1,
-            "has_skylight": 1,
-            "height": 384,
-            "infiniburn": "#minecraft:infiniburn_overworld",
-            "logical_height": 384,
-            "min_y": -64,
-            "monster_spawn_block_light_limit": 0,
-            "monster_spawn_light_level": {
-                "max_inclusive": 7,
-                "min_inclusive": 0,
-                "type": "minecraft:uniform"
-            },
-            "natural": 1,
-            "piglin_safe": 0,
-            "respawn_anchor_works": 0,
-            "ultrawarm": 0
-        }
-    )).unwrap();
-
-	let mut p = Packet::empty(clientbound::configuration::REGISTRY_DATA);
-	p.write_string("minecraft:dimension_type")?;
-	p.write_varint(1)?;
-	p.write_string("minecraft:overworld")?;
-	p.write_boolean(true)?;
-	// p.write_nbt(&DynNBT::Compound(HashMap::from_iter([
-	// 	("bed_works".to_string(), DynNBT::Byte(1)),
-	// 	("has_skylight".to_string(), DynNBT::Byte(1)),
-	// 	("natural".to_string(), DynNBT::Byte(1)),
-	// 	("coordinate_scale".to_string(), DynNBT::Double(1.0)),
-	// 	("effects".to_string(), DynNBT::String("minecraft:overworld".to_string())),
-	// ])))?;
-	p.write_bytes(&data)?;
-	client.write_packet(&p)?;
+    send_registry_data(client.clone())?;
 
     Ok(())
 }
@@ -103,6 +99,8 @@ pub fn handle_play_state(
 
 	packet.write_boolean(false)?; // Enforces Secure Chat
 	client.write_packet(&packet)?;
+
+    loop {}
 
     Ok(())
 }

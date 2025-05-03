@@ -156,7 +156,7 @@ fn main() {
     let mut server = ServerContext::new(config);
 
     server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
-    server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера
+    // server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера
 
     // Бетонируем сервер контекст от изменений
     let server = Arc::new(server);
