@@ -4,7 +4,7 @@ use context::ServerContext;
 use ignore_result::Ignore;
 use log::{error, info};
 use player::context::ClientContext;
-use protocol::handle_connection;
+use protocol::handler::handle_connection;
 use rust_mc_proto::{MinecraftConnection, ProtocolError};
 
 pub mod config;

@@ -1,35 +1,12 @@
 use std::{io::Read, sync::Arc};
 
-use super::{player::context::{ClientContext, ClientInfo, Handshake, PlayerInfo}, ServerError};
+use crate::server::{player::context::{ClientContext, ClientInfo, Handshake, PlayerInfo}, ServerError};
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 
-use crate::{server::data::text_component::TextComponent, trigger_event};
+use crate::trigger_event;
 
-// Тут будут все айди пакетов
+use super::{id::*, play::handle_play_state, ConnectionState};
 
-pub const HANDSHAKE_ID: u8 = 0x00;
-pub const STATUS_REQUEST_ID: u8 = 0x00;
-pub const STATUS_RESPONSE_ID: u8 = 0x00;
-pub const STATUS_PING_REQUEST_ID: u8 = 0x01;
-pub const STATUS_PING_RESPONSE_ID: u8 = 0x01;
-pub const LOGIN_START_ID: u8 = 0x00;
-pub const LOGIN_SET_COMPRESSION_ID: u8 = 0x03;
-pub const LOGIN_SUCCESS_ID: u8 = 0x02;
-pub const LOGIN_ACKNOWLEDGED_ID: u8 = 0x03;
-pub const CONFIGURATION_SERVERBOUND_PLUGIN_MESSAGE_ID: u8 = 0x02;
-pub const CONFIGURATION_CLIENT_INFORMATION_ID: u8 = 0x00;
-pub const CONFIGURATION_FINISH_ID: u8 = 0x03;
-pub const CONFIGURATION_ACKNOWLEDGE_FINISH_ID: u8 = 0x03;
-
-
-#[derive(Debug, Clone)]
-pub enum ConnectionState {
-    Handshake,
-    Status,
-    Login,
-    Configuration,
-    Play
-}
 
 pub fn handle_connection(
 	client: Arc<ClientContext>, // Контекст клиента
@@ -38,7 +15,7 @@ pub fn handle_connection(
 	// Получение пакетов производится через client.conn(), 
 	// ВАЖНО: не помещать сам client.conn() в переменные, 
 	// он должен сразу убиваться иначе соединение гдето задедлочится
-	let mut packet = client.read_packet(HANDSHAKE_ID)?;
+	let mut packet = client.read_packet(serverbound::handshake::HANDSHAKE)?;
 
 	let protocol_version = packet.read_varint()?; // Получаем версия протокола, может быть отрицательным если наш клиент дэбил
 	let server_address = packet.read_string()?; // Получаем домен/адрес сервера к которому пытается подключиться клиент, например "play.example.com", а не айпи
@@ -56,8 +33,8 @@ pub fn handle_connection(
 				let mut packet = client.read_any_packet()?;
 
 				match packet.id() {
-					STATUS_REQUEST_ID => { // Запрос статуса
-						let mut packet = Packet::empty(STATUS_RESPONSE_ID);
+					serverbound::status::REQUEST => { // Запрос статуса
+						let mut packet = Packet::empty(clientbound::status::RESPONSE);
 
 						// Дефолтный статус
 						let mut status = "{
@@ -76,11 +53,11 @@ pub fn handle_connection(
 
 						client.write_packet(&packet)?;
 					},
-					STATUS_PING_REQUEST_ID => { // Пинг
+					serverbound::status::PING_REQUEST => { // Пинг
 						// Раньше мы просто отправляли ему его-же пакет, но сейчас,
 						// С приходом к власти констант айди-пакетов, нам приходится делать такое непотребство
 						let timestamp = packet.read_long()?;
-						let mut packet = Packet::empty(STATUS_PING_RESPONSE_ID);
+						let mut packet = Packet::empty(clientbound::status::PONG_RESPONSE);
 						packet.write_long(timestamp)?;
 						client.write_packet(&packet)?; 
 					},
@@ -94,7 +71,7 @@ pub fn handle_connection(
 			client.set_state(ConnectionState::Login)?; // Мы находимся в режиме Login
 
 			// Читаем пакет Login Start
-			let mut packet = client.read_packet(LOGIN_START_ID)?;
+			let mut packet = client.read_packet(serverbound::login::START)?;
 
 			let name = packet.read_string()?;
 			let uuid = packet.read_uuid()?;
@@ -107,25 +84,25 @@ pub fn handle_connection(
 
 			// Отправляем пакет Set Compression если сжатие указано
 			if let Some(threshold) = client.server.config.server.compression_threshold {
-				client.write_packet(&Packet::build(LOGIN_SET_COMPRESSION_ID, |p| p.write_usize_varint(threshold))?)?;
+				client.write_packet(&Packet::build(clientbound::login::SET_COMPRESSION, |p| p.write_usize_varint(threshold))?)?;
 				client.set_compression(Some(threshold)); // Устанавливаем сжатие на соединении
 			}
 
 			// Отправка пакета Login Success
-			client.write_packet(&Packet::build(LOGIN_SUCCESS_ID, |p| {
+			client.write_packet(&Packet::build(clientbound::login::SUCCESS, |p| {
 				p.write_uuid(&uuid)?;
 				p.write_string(&name)?;
 				p.write_varint(0)
 			})?)?;
 
-			client.read_packet(LOGIN_ACKNOWLEDGED_ID)?; // Пакет Login Acknowledged
+			client.read_packet(serverbound::login::ACKNOWLEDGED)?; // Пакет Login Acknowledged
 
 			client.set_state(ConnectionState::Configuration)?; // Мы перешли в режим Configuration
 			
 			// Получение бренда клиента из Serverbound Plugin Message
 			// Identifier канала откуда берется бренд: minecraft:brand
 			let brand = loop {
-				let mut packet = client.read_packet(CONFIGURATION_SERVERBOUND_PLUGIN_MESSAGE_ID)?; // Пакет Serverbound Plugin Message
+				let mut packet = client.read_packet(serverbound::configuration::PLUGIN_MESSAGE)?; // Пакет Serverbound Plugin Message
 
 				let identifier = packet.read_string()?;
 
@@ -139,7 +116,7 @@ pub fn handle_connection(
 				}
 			};
 
-			let mut packet = client.read_packet(CONFIGURATION_CLIENT_INFORMATION_ID)?; // Пакет Client Information
+			let mut packet = client.read_packet(serverbound::configuration::CLIENT_INFORMATION)?; // Пакет Client Information
 
 			let locale = packet.read_string()?; // for example: en_us
 			let view_distance = packet.read_signed_byte()?; // client-side render distance in chunks
@@ -166,8 +143,8 @@ pub fn handle_connection(
 
 			// TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
 
-			client.write_packet(&Packet::empty(CONFIGURATION_FINISH_ID))?;
-			client.read_packet(CONFIGURATION_ACKNOWLEDGE_FINISH_ID)?;
+			client.write_packet(&Packet::empty(clientbound::configuration::FINISH))?;
+			client.read_packet(serverbound::configuration::ACKNOWLEDGE_FINISH)?;
 
 			client.set_state(ConnectionState::Play)?; // Мы перешли в режим Play
 
@@ -178,19 +155,6 @@ pub fn handle_connection(
 			return Err(ServerError::UnexpectedPacket); 
 		}
 	}
-
-	Ok(())
-}
-
-// Отдельная функция для работы с самой игрой
-pub fn handle_play_state(
-	client: Arc<ClientContext>, // Контекст клиента
-) -> Result<(), ServerError> { 
-
-	// Отключение игрока с сообщением
-	client.protocol_helper().disconnect(TextComponent::rainbow("server is in developement suka".to_string()))?;
-
-	// TODO: Сделать отправку пакетов Play
 
 	Ok(())
 }

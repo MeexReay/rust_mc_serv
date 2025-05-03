@@ -2,7 +2,7 @@ use std::{io::Read, sync::Arc, time::{Duration, SystemTime}};
 
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 
-use crate::server::{data::text_component::TextComponent, data::ReadWriteNBT, protocol::ConnectionState, ServerError};
+use crate::server::{data::{text_component::TextComponent, ReadWriteNBT}, protocol::{id::{clientbound, serverbound}, *}, ServerError};
 
 use super::context::ClientContext;
 
@@ -31,8 +31,8 @@ impl ProtocolHelper {
     pub fn leave_configuration(&self) -> Result<(), ServerError> {
         match self.state {
             ConnectionState::Configuration => {
-                self.client.write_packet(&Packet::empty(0x03))?;
-                self.client.read_packet()?;
+                self.client.write_packet(&Packet::empty(clientbound::configuration::FINISH))?;
+                self.client.read_packet(serverbound::configuration::ACKNOWLEDGE_FINISH)?;
                 self.client.set_state(ConnectionState::Play)?;
                 Ok(())
             },
@@ -44,8 +44,8 @@ impl ProtocolHelper {
     pub fn enter_configuration(&self) -> Result<(), ServerError> {
         match self.state {
             ConnectionState::Play => {
-                self.client.write_packet(&Packet::empty(0x6F))?;
-                self.client.read_packet()?;
+                self.client.write_packet(&Packet::empty(clientbound::play::START_CONFIGURATION))?;
+                self.client.read_packet(serverbound::play::ACKNOWLEDGE_CONFIGURATION)?;
                 self.client.set_state(ConnectionState::Configuration)?;
                 Ok(())
             },
@@ -58,14 +58,14 @@ impl ProtocolHelper {
         match self.state {
             ConnectionState::Play => {
                 let time = SystemTime::now();
-                self.client.write_packet(&Packet::empty(0x36))?;
-                self.client.read_packet()?;
+                self.client.write_packet(&Packet::empty(clientbound::play::PING))?;
+                self.client.read_packet(serverbound::play::PONG)?;
                 Ok(SystemTime::now().duration_since(time).unwrap())
             },
             ConnectionState::Configuration => {
                 let time = SystemTime::now();
-                self.client.write_packet(&Packet::empty(0x05))?;
-                self.client.read_packet()?;
+                self.client.write_packet(&Packet::empty(clientbound::configuration::PING))?;
+                self.client.read_packet(serverbound::configuration::PONG)?;
                 Ok(SystemTime::now().duration_since(time).unwrap())
             },
             _ => Err(ServerError::UnexpectedState)
@@ -101,11 +101,11 @@ impl ProtocolHelper {
     pub fn request_cookie(&self, id: &str) -> Result<Option<Vec<u8>>, ServerError> {
         match self.state {
             ConnectionState::Configuration => {
-                let mut packet = Packet::empty(0x00);
+                let mut packet = Packet::empty(clientbound::configuration::COOKIE_REQUEST);
                 packet.write_string(id)?;
                 self.client.write_packet(&packet)?;
 
-                let mut packet = self.client.read_packet()?;
+                let mut packet = self.client.read_packet(serverbound::configuration::COOKIE_RESPONSE)?;
                 packet.read_string()?;
                 let data = if packet.read_boolean()? {
                     let n = packet.read_usize_varint()?;
@@ -124,13 +124,13 @@ impl ProtocolHelper {
     pub fn send_login_plugin_request(&self, id: i32, channel: &str, data: &[u8]) -> Result<(i32, Option<Vec<u8>>), ServerError> {
         match self.state {
             ConnectionState::Login => {
-                let mut packet = Packet::empty(0x04);
+                let mut packet = Packet::empty(clientbound::login::PLUGIN_REQUEST);
                 packet.write_varint(id)?;
                 packet.write_string(channel)?;
                 packet.write_bytes(data)?;
                 self.client.write_packet(&packet)?;
 
-                let mut packet = self.client.read_packet()?;
+                let mut packet = self.client.read_packet(serverbound::login::PLUGIN_RESPONSE)?;
                 let identifier = packet.read_varint()?;
                 let data = if packet.read_boolean()? {
                     let mut data = Vec::new();
@@ -148,8 +148,8 @@ impl ProtocolHelper {
 
     pub fn send_plugin_message(&self, channel: &str, data: &[u8]) -> Result<(), ServerError> {
         let mut packet = match self.state {
-            ConnectionState::Configuration => Packet::empty(0x01),
-            ConnectionState::Play => Packet::empty(0x18),
+            ConnectionState::Configuration => Packet::empty(clientbound::configuration::PLUGIN_MESSAGE),
+            ConnectionState::Play => Packet::empty(clientbound::play::PLUGIN_MESSAGE),
             _ => return Err(ServerError::UnexpectedState)
         };
         packet.write_string(channel)?;
