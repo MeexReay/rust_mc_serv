@@ -3,10 +3,16 @@ use std::sync::Arc;
 use rust_mc_proto::{DataWriter, Packet};
 
 use crate::server::{
-    ServerError, data::text_component::TextComponent, player::context::ClientContext,
+    ServerError, player::context::ClientContext,
 };
 
 use super::id::clientbound;
+
+pub fn handle_configuration_state(
+    client: Arc<ClientContext>, // Контекст клиента
+) -> Result<(), ServerError> {
+    Ok(())
+} 
 
 // Отдельная функция для работы с самой игрой
 pub fn handle_play_state(

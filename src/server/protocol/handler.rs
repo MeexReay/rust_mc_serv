@@ -8,7 +8,7 @@ use rust_mc_proto::{DataReader, DataWriter, Packet};
 
 use crate::trigger_event;
 
-use super::{ConnectionState, id::*, play::handle_play_state};
+use super::{id::*, play::{handle_configuration_state, handle_play_state}, ConnectionState};
 
 pub fn handle_connection(
     client: Arc<ClientContext>, // Контекст клиента
@@ -157,7 +157,7 @@ pub fn handle_connection(
                 particle_status,
             });
 
-            // TODO: Заюзать Listener'ы чтобы они подмешивали сюда чото
+            handle_configuration_state(client.clone())?;
 
             client.write_packet(&Packet::empty(clientbound::configuration::FINISH))?;
             client.read_packet(serverbound::configuration::ACKNOWLEDGE_FINISH)?;
