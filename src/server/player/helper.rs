@@ -37,6 +37,32 @@ impl ProtocolHelper {
         }
     }
 
+    pub fn reset_chat(&self) -> Result<(), ServerError> {
+        match self.state {
+            ConnectionState::Configuration => {
+                self.client
+                    .write_packet(&Packet::empty(clientbound::configuration::RESET_CHAT))?;
+                Ok(())
+            }
+            _ => Err(ServerError::UnexpectedState),
+        }
+    }
+
+    pub fn store_cookie(&self, id: &str, data: &[u8]) -> Result<(), ServerError> {
+        self.client.write_packet(&Packet::build(
+            match self.state {
+                ConnectionState::Configuration => clientbound::configuration::STORE_COOKIE,
+                ConnectionState::Play => clientbound::play::STORE_COOKIE,
+                _ => { return Err(ServerError::UnexpectedState) },
+            },
+            |p| {
+                p.write_string(id)?;
+                p.write_bytes(data)
+            },
+        )?)?;
+        Ok(())
+    }
+
     /// Leave from Configuration to Play state
     pub fn leave_configuration(&self) -> Result<(), ServerError> {
         match self.state {
@@ -124,6 +150,24 @@ impl ProtocolHelper {
                 let mut packet = self
                     .client
                     .read_packet(serverbound::configuration::COOKIE_RESPONSE)?;
+                packet.read_string()?;
+                let data = if packet.read_boolean()? {
+                    let n = packet.read_usize_varint()?;
+                    Some(packet.read_bytes(n)?)
+                } else {
+                    None
+                };
+
+                Ok(data)
+            },
+            ConnectionState::Play => {
+                let mut packet = Packet::empty(clientbound::play::COOKIE_REQUEST);
+                packet.write_string(id)?;
+                self.client.write_packet(&packet)?;
+
+                let mut packet = self
+                    .client
+                    .read_packet(serverbound::play::COOKIE_RESPONSE)?;
                 packet.read_string()?;
                 let data = if packet.read_boolean()? {
                     let n = packet.read_usize_varint()?;
