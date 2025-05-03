@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::server::{context::ServerContext, protocol::ConnectionState, ServerError};
 
-use super::protocol::ProtocolHelper;
+use super::helper::ProtocolHelper;
 
 // Клиент контекст
 // Должен быть обернут в Arc для передачи между потоками
