@@ -54,47 +54,47 @@ pub fn start_server(server: Arc<ServerContext>) {
     // Биндим сервер где надо
 	let Ok(listener) = TcpListener::bind(&server.config.bind.host) else {
         error!("Не удалось забиндить сервер на {}", &server.config.bind.host); 
-       return;
-   };
+        return;
+    };
 
-   info!("Сервер запущен на {}", &server.config.bind.host); 
+    info!("Сервер запущен на {}", &server.config.bind.host); 
 
-   while let Ok((stream, addr)) = listener.accept() {
-       let server = server.clone();
+    while let Ok((stream, addr)) = listener.accept() {
+        let server = server.clone();
 
-       thread::spawn(move || { 
-           info!("Подключение: {}", addr);
+        thread::spawn(move || { 
+            info!("Подключение: {}", addr);
 
-           // Установка таймаутов на чтение и запись
-           // По умолчанию пусть будет 5 секунд, надо будет сделать настройку через конфиг
-           stream.set_read_timeout(Some(Duration::from_secs(server.config.bind.timeout))).ignore();
-           stream.set_write_timeout(Some(Duration::from_secs(server.config.bind.timeout))).ignore();
+            // Установка таймаутов на чтение и запись
+            // По умолчанию пусть будет 5 секунд, надо будет сделать настройку через конфиг
+            stream.set_read_timeout(Some(Duration::from_secs(server.config.bind.timeout))).ignore();
+            stream.set_write_timeout(Some(Duration::from_secs(server.config.bind.timeout))).ignore();
 
-           // Оборачиваем стрим в майнкрафт конекшн лично для нашего удовольствия
-           let conn = MinecraftConnection::new(stream);
+            // Оборачиваем стрим в майнкрафт конекшн лично для нашего удовольствия
+            let conn = MinecraftConnection::new(stream);
 
-           // Создаем контекст клиента
-           // Передавется во все листенеры и хандлеры чтобы определять именно этот клиент
-           let client = Arc::new(ClientContext::new(server.clone(), conn));
+            // Создаем контекст клиента
+            // Передавется во все листенеры и хандлеры чтобы определять именно этот клиент
+            let client = Arc::new(ClientContext::new(server.clone(), conn));
 
-           // Добавляем клиента в список клиентов сервера
-           // Используем адрес как ключ, врятли ipv4 будет нам врать
-           server.clients.insert(client.addr, client.clone());
+            // Добавляем клиента в список клиентов сервера
+            // Используем адрес как ключ, врятли ipv4 будет нам врать
+            server.clients.insert(client.addr, client.clone());
 
-           // Обработка подключения
-           // Если ошибка -> выводим
-           match handle_connection(client.clone()) {
-               Ok(_) => {},
-               Err(ServerError::ConnectionClosed) => {},
-               Err(error) => {
-                   error!("Ошибка подключения: {error:?}");
-               },
-           };
+            // Обработка подключения
+            // Если ошибка -> выводим
+            match handle_connection(client.clone()) {
+                Ok(_) => {},
+                Err(ServerError::ConnectionClosed) => {},
+                Err(error) => {
+                    error!("Ошибка подключения: {error:?}");
+                },
+            };
 
-           // Удаляем клиента из списка клиентов
-           server.clients.remove(&client.addr);
+            // Удаляем клиента из списка клиентов
+            server.clients.remove(&client.addr);
 
-           info!("Отключение: {}", addr);
-       });
-   }
+            info!("Отключение: {}", addr);
+        });
+    }
 }
