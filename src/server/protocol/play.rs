@@ -1,6 +1,6 @@
 use std::{io::Cursor, sync::Arc, thread, time::{Duration, SystemTime, UNIX_EPOCH}};
 
-use rust_mc_proto::{DataWriter, Packet, read_packet};
+use rust_mc_proto::{read_packet, DataReader, DataWriter, Packet};
 
 use crate::server::{data::{text_component::TextComponent, ReadWriteNBT}, player::context::ClientContext, ServerError};
 
@@ -241,6 +241,48 @@ pub fn handle_play_state(
     set_center_chunk(client.clone(), 0, 0)?;
     send_example_chunk(client.clone(), 0, 0)?;
 
+    thread::spawn({
+        let client = client.clone();
+    
+        move || -> Result<(), ServerError> {
+            while client.is_alive() {
+                let mut packet = client.read_any_packet()?;
+
+                match packet.id() {
+                    serverbound::play::SET_PLAYER_POSITION => {
+                        let x = packet.read_double()?;
+                        let y = packet.read_double()?;
+                        let z = packet.read_double()?;
+                        let _ = packet.read_byte()?; // flags
+    
+                        client.set_position((x, y, z));
+                    }, 
+                    serverbound::play::SET_PLAYER_POSITION_AND_ROTATION => {
+                        let x = packet.read_double()?;
+                        let y = packet.read_double()?;
+                        let z = packet.read_double()?;
+                        let yaw = packet.read_float()?;
+                        let pitch = packet.read_float()?;
+                        let _ = packet.read_byte()?; // flags
+    
+                        client.set_position((x, y, z));
+                        client.set_rotation((yaw, pitch));
+                    },
+                    serverbound::play::SET_PLAYER_ROTATION => {
+                        let yaw = packet.read_float()?;
+                        let pitch = packet.read_float()?;
+                        let _ = packet.read_byte()?; // flags
+    
+                        client.set_rotation((yaw, pitch));
+                    },
+                    _ => {}
+                }
+            }
+
+            Ok(())
+        }
+    });
+
     let mut ticks_alive = 0u64;
 
     while client.is_alive() {
@@ -249,7 +291,12 @@ pub fn handle_play_state(
         }
 
         if ticks_alive % 20 == 0 { // 1 sec timer
-            // do something
+            let (x, y, z) = client.position();
+
+            send_system_message(client.clone(), 
+                TextComponent::rainbow(format!(
+                    "Pos: {} {} {}", x as u64, y as u64, z as u64
+                )), false)?;
         }
 
         send_system_message(client.clone(), TextComponent::rainbow(format!("Ticks alive: {}", ticks_alive)), true)?;

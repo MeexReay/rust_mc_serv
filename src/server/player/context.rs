@@ -23,7 +23,10 @@ pub struct ClientContext {
     state: RwLock<ConnectionState>,
     packet_buffer: Mutex<VecDeque<Packet>>,
     read_loop: AtomicBool,
-    is_alive: AtomicBool
+    is_alive: AtomicBool,
+    position: RwLock<(f64, f64, f64)>,
+    velocity: RwLock<(f64, f64, f64)>,
+    rotation: RwLock<(f32, f32)>,
 }
 
 // Реализуем сравнение через адрес
@@ -54,7 +57,10 @@ impl ClientContext {
             state: RwLock::new(ConnectionState::Handshake),
             packet_buffer: Mutex::new(VecDeque::new()),
             read_loop: AtomicBool::new(false),
-            is_alive: AtomicBool::new(true)
+            is_alive: AtomicBool::new(true),
+            position: RwLock::new((0.0, 0.0, 0.0)),
+            velocity: RwLock::new((0.0, 0.0, 0.0)),
+            rotation: RwLock::new((0.0, 0.0))
         }
     }
 
@@ -98,6 +104,30 @@ impl ClientContext {
 
     pub fn state(self: &Arc<Self>) -> ConnectionState {
         self.state.read().unwrap().clone()
+    }
+
+    pub fn set_position(self: &Arc<Self>, position: (f64, f64, f64)) {
+        *self.position.write().unwrap() = position;
+    }
+
+    pub fn set_velocity(self: &Arc<Self>, velocity: (f64, f64, f64)) {
+        *self.velocity.write().unwrap() = velocity;
+    }
+
+    pub fn set_rotation(self: &Arc<Self>, rotation: (f32, f32)) {
+        *self.rotation.write().unwrap() = rotation;
+    }
+
+    pub fn position(self: &Arc<Self>) -> (f64, f64, f64) {
+        self.position.read().unwrap().clone()
+    }
+
+    pub fn velocity(self: &Arc<Self>) -> (f64, f64, f64) {
+        self.velocity.read().unwrap().clone()
+    }
+
+    pub fn rotation(self: &Arc<Self>) -> (f32, f32) {
+        self.rotation.read().unwrap().clone()
     }
 
     pub fn write_packet(self: &Arc<Self>, packet: &Packet) -> Result<(), ServerError> {
