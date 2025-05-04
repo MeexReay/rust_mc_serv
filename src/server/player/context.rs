@@ -1,15 +1,10 @@
 use std::{
-    hash::Hash,
-    net::{SocketAddr, TcpStream},
-    sync::{
-        Arc, RwLock,
-        atomic::{AtomicBool, Ordering},
-        mpsc::{self, Sender},
-    },
+    collections::VecDeque, hash::Hash, net::{SocketAddr, TcpStream}, sync::{
+        atomic::{AtomicBool, Ordering}, Arc, Mutex, RwLock
+    }, thread, time::Duration
 };
 
-use dashmap::DashMap;
-use rust_mc_proto::{MinecraftConnection, Packet};
+use rust_mc_proto::{MinecraftConnection, Packet, ProtocolError};
 use uuid::Uuid;
 
 use crate::server::{ServerError, context::ServerContext, protocol::ConnectionState};
@@ -26,8 +21,9 @@ pub struct ClientContext {
     client_info: RwLock<Option<ClientInfo>>,
     player_info: RwLock<Option<PlayerInfo>>,
     state: RwLock<ConnectionState>,
-    packet_waiters: DashMap<usize, (u8, Sender<Packet>)>,
+    packet_buffer: Mutex<VecDeque<Packet>>,
     read_loop: AtomicBool,
+    is_alive: AtomicBool
 }
 
 // Реализуем сравнение через адрес
@@ -56,8 +52,9 @@ impl ClientContext {
             client_info: RwLock::new(None),
             player_info: RwLock::new(None),
             state: RwLock::new(ConnectionState::Handshake),
-            packet_waiters: DashMap::new(),
+            packet_buffer: Mutex::new(VecDeque::new()),
             read_loop: AtomicBool::new(false),
+            is_alive: AtomicBool::new(true)
         }
     }
 
@@ -121,22 +118,40 @@ impl ClientContext {
             packet.get_mut().set_position(0);
         }
         if !cancelled {
-            self.conn.write().unwrap().write_packet(&packet)?;
+            match self.conn.write().unwrap().write_packet(&packet) {
+                Ok(_) => {},
+                Err(ProtocolError::ConnectionClosedError) => {
+                    self.is_alive.store(false, Ordering::SeqCst);
+                    return Err(ServerError::ConnectionClosed);
+                },
+                Err(e) => {
+                    return Err(e.into());
+                }
+            };
         }
         Ok(())
     }
 
     pub fn run_read_loop(
-        self: &Arc<Self>,
-        callback: impl Fn(Packet) -> Result<(), ServerError>,
+        self: &Arc<Self>
     ) -> Result<(), ServerError> {
-        let state = self.state();
+        self.read_loop.store(true, Ordering::SeqCst);
 
         let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
 
         loop {
-            let mut packet = conn.read_packet()?;
+            let mut packet = match conn.read_packet() {
+                Ok(v) => v,
+                Err(ProtocolError::ConnectionClosedError) => {
+                    self.is_alive.store(false, Ordering::SeqCst);
+                    return Err(ServerError::ConnectionClosed);
+                },
+                Err(e) => {
+                    return Err(e.into());
+                }
+            };
             let mut cancelled = false;
+            let state = self.state();
             for handler in self
                 .server
                 .packet_handlers(|o| o.on_incoming_packet_priority())
@@ -151,31 +166,33 @@ impl ClientContext {
                 packet.get_mut().set_position(0);
             }
             if !cancelled {
-                let mut skip = false;
-                for (_, (id, sender)) in self.packet_waiters.clone() {
-                    if id == packet.id() {
-                        sender.send(packet.clone()).unwrap();
-                        skip = true;
-                        break;
-                    }
-                }
-                if !skip {
-                    callback(packet.clone())?;
-                }
+                self.packet_buffer.lock().unwrap().push_back(packet);
             }
         }
     }
 
     pub fn read_any_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
         if self.read_loop.load(Ordering::SeqCst) {
-            Err(ServerError::ReadLoopMode)
+            loop {
+                if let Some(packet) = self.packet_buffer.lock().unwrap().pop_front() {
+                    return Ok(packet);
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
         } else {
             let state = self.state();
 
-            let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
-
             loop {
-                let mut packet = conn.read_packet()?;
+                let mut packet = match self.conn.write().unwrap().read_packet() {
+                    Ok(v) => v,
+                    Err(ProtocolError::ConnectionClosedError) => {
+                        self.is_alive.store(false, Ordering::SeqCst);
+                        return Err(ServerError::ConnectionClosed);
+                    },
+                    Err(e) => {
+                        return Err(e.into());
+                    }
+                };
                 let mut cancelled = false;
                 for handler in self
                     .server
@@ -199,22 +216,32 @@ impl ClientContext {
 
     pub fn read_packet(self: &Arc<Self>, id: u8) -> Result<Packet, ServerError> {
         if self.read_loop.load(Ordering::SeqCst) {
-            let (tx, rx) = mpsc::channel::<Packet>();
-
-            let key: usize = (&tx as *const Sender<Packet>).addr();
-            self.packet_waiters.insert(key, (id, tx));
-
             loop {
-                if let Ok(packet) = rx.recv() {
-                    self.packet_waiters.remove(&key);
-                    break Ok(packet);
+                {
+                    let mut locked = self.packet_buffer.lock().unwrap();
+                    for (i, packet) in locked.clone().iter().enumerate() {
+                        if packet.id() == id {
+                            locked.remove(i);
+                            return Ok(packet.clone());
+                        }
+                    }
                 }
+                thread::sleep(Duration::from_millis(10));
             }
         } else {
-            let packet = self.read_any_packet()?;
+            let packet = match self.read_any_packet() {
+                Ok(v) => v,
+                Err(ServerError::ConnectionClosed) => {
+                    self.is_alive.store(false, Ordering::SeqCst);
+                    return Err(ServerError::ConnectionClosed);
+                },
+                Err(e) => {
+                    return Err(e);
+                }
+            };
 
             if packet.id() != id {
-                Err(ServerError::UnexpectedPacket)
+                Err(ServerError::UnexpectedPacket(packet.id()))
             } else {
                 Ok(packet)
             }
@@ -224,8 +251,13 @@ impl ClientContext {
     pub fn close(self: &Arc<Self>) {
         self.conn.write().unwrap().close();
     }
+
     pub fn set_compression(self: &Arc<Self>, threshold: Option<usize>) {
         self.conn.write().unwrap().set_compression(threshold);
+    }
+
+    pub fn is_alive(self: &Arc<Self>) -> bool {
+        self.is_alive.load(Ordering::SeqCst)
     }
 
     pub fn protocol_helper(self: &Arc<Self>) -> ProtocolHelper {

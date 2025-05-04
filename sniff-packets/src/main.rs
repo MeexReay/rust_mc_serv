@@ -175,5 +175,24 @@ fn main() -> Result<(), ProtocolError> {
 
     fs::write("registry-data.bin", &data).unwrap();
 
+    let packet = conn.read_packet()?;
+    conn.write_packet(&packet)?; // finish conf
+
+    loop {
+        let mut packet = conn.read_packet()?;
+
+        if packet.id() == 0x41 {
+            let id = packet.read_varint()?;
+
+            conn.write_packet(&Packet::build(0x00, |packet| packet.write_varint(id))?)?;
+        }
+
+        if packet.id() == 0x27 {
+            // here you can read "Chunk Data and Update Light" packet
+
+            break;
+        }
+    }
+
     Ok(())
 }

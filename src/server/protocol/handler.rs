@@ -75,8 +75,8 @@ pub fn handle_connection(
                         packet.write_long(timestamp)?;
                         client.write_packet(&packet)?;
                     }
-                    _ => {
-                        return Err(ServerError::UnexpectedPacket);
+                    id => {
+                        return Err(ServerError::UnexpectedPacket(id));
                     }
                 }
             }
@@ -181,7 +181,7 @@ pub fn handle_connection(
         }
         _ => {
             // Тип подключения не рукопожатный
-            return Err(ServerError::UnexpectedPacket);
+            return Err(ServerError::UnexpectedState);
         }
     }
 

@@ -1,8 +1,8 @@
-use std::{io::Cursor, sync::Arc, thread};
+use std::{io::Cursor, sync::Arc, thread, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use rust_mc_proto::{DataWriter, Packet, read_packet};
 
-use crate::server::{data::text_component::TextComponent, player::context::ClientContext, ServerError};
+use crate::server::{player::context::ClientContext, ServerError};
 
 use super::id::*;
 
@@ -12,9 +12,7 @@ pub fn send_update_tags(client: Arc<ClientContext>) -> Result<(), ServerError> {
     client.write_packet(&Packet::from_bytes(
         clientbound::configuration::UPDATE_TAGS,
         include_bytes!("update-tags.bin"),
-    ))?;
-
-    Ok(())
+    ))
 }
 
 pub fn send_registry_data(client: Arc<ClientContext>) -> Result<(), ServerError> {
@@ -49,16 +47,10 @@ pub fn handle_configuration_state(
     client.read_packet(serverbound::configuration::KNOWN_PACKS)?;
 
     send_registry_data(client.clone())?;
-    send_update_tags(client.clone())?;
-
-    Ok(())
+    send_update_tags(client.clone())
 }
 
-// Отдельная функция для работы с самой игрой
-pub fn handle_play_state(
-    client: Arc<ClientContext>, // Контекст клиента
-) -> Result<(), ServerError> {
-
+pub fn send_login(client: Arc<ClientContext>) -> Result<(), ServerError> {
     // Отправка пакета Login
     let mut packet = Packet::empty(clientbound::play::LOGIN);
 
@@ -89,33 +81,175 @@ pub fn handle_play_state(
 
     packet.write_boolean(false)?; // Enforces Secure Chat
 
+    client.write_packet(&packet)
+}
+
+pub fn send_game_event(client: Arc<ClientContext>, event: u8, value: f32) -> Result<(), ServerError> {
+    let mut packet = Packet::empty(clientbound::play::GAME_EVENT);
+
+    packet.write_byte(event)?;
+    packet.write_float(value)?;
+
+    client.write_packet(&packet)
+}
+
+pub fn sync_player_pos(
+    client: Arc<ClientContext>,
+    x: f64,
+    y: f64,
+    z: f64,
+    vel_x: f64,
+    vel_y: f64,
+    vel_z: f64,
+    yaw: f32,
+    pitch: f32,
+    flags: i32
+) -> Result<(), ServerError> {
+    let timestamp = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() & 0xFFFFFFFF) as i32;
+    
+    let mut packet = Packet::empty(clientbound::play::SYNCHRONIZE_PLAYER_POSITION);
+
+    packet.write_varint(timestamp)?;
+    packet.write_double(x)?;
+    packet.write_double(y)?;
+    packet.write_double(z)?;
+    packet.write_double(vel_x)?;
+    packet.write_double(vel_y)?;
+    packet.write_double(vel_z)?;
+    packet.write_float(yaw)?;
+    packet.write_float(pitch)?;
+    packet.write_int(flags)?;
+
     client.write_packet(&packet)?;
+
+    client.read_packet(serverbound::play::CONFIRM_TELEPORTATION)?;
+
+    Ok(())
+}
+
+pub fn set_center_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<(), ServerError> {
+    let mut packet = Packet::empty(clientbound::play::SET_CENTER_CHUNK);
+
+    packet.write_varint(x)?;
+    packet.write_varint(z)?;
+
+    client.write_packet(&packet)
+}
+
+pub fn send_example_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<(), ServerError> {
+    let mut packet = Packet::empty(clientbound::play::CHUNK_DATA_AND_UPDATE_LIGHT);
+
+    packet.write_int(x)?;
+    packet.write_int(z)?;
+
+    // heightmap
+
+    packet.write_varint(1)?; // heightmaps count
+    packet.write_varint(0)?; // MOTION_BLOCKING
+    packet.write_varint(256)?; // Length of the following long array (16 * 16 = 256)
+    for _ in 0..256 {
+        packet.write_long(0)?; // height - 0
+    }
+
+    // sending chunk data
+
+    let mut chunk_data = Vec::new();
+
+    // we want to fill the area from -64 to 0, so it will be 4 chunk sections
+
+    for _ in 0..4 {
+        chunk_data.write_short(4096)?; // non-air blocks count, 16 * 16 * 16 = 4096 stone blocks
+
+        // blocks paletted container
+        chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
+        chunk_data.write_varint(1)?; // block state id in the registry (1 for stone)
+
+        // biomes palleted container
+        chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
+        chunk_data.write_varint(27)?; // biome id in the registry
+    }
+
+    // air chunk sections
+
+    for _ in 0..20 {
+        chunk_data.write_short(0)?; // non-air blocks count, 0
+
+        // blocks paletted container
+        chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
+        chunk_data.write_varint(0)?; // block state id in the registry (0 for air)
+
+        // biomes palleted container
+        chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
+        chunk_data.write_varint(27)?; // biome id in the registry
+    }
+
+    packet.write_usize_varint(chunk_data.len())?;
+    packet.write_bytes(&chunk_data)?;
+
+    packet.write_byte(0)?;
+
+
+    // light data
+
+    packet.write_byte(0)?;
+    packet.write_byte(0)?;
+    packet.write_byte(0)?;
+    packet.write_byte(0)?;
+    packet.write_byte(0)?;
+    packet.write_byte(0)?;
+
+
+    client.write_packet(&packet)?;
+
+    Ok(())
+}
+
+pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+
+    let mut packet = Packet::empty(clientbound::play::KEEP_ALIVE);
+    packet.write_long(timestamp)?;
+    client.write_packet(&packet)?;
+
+    client.read_packet(serverbound::play::KEEP_ALIVE)?;
+
+    Ok(())
+}
+
+// Отдельная функция для работы с самой игрой
+pub fn handle_play_state(
+    client: Arc<ClientContext>, // Контекст клиента
+) -> Result<(), ServerError> {
 
     thread::spawn({
         let client = client.clone();
-
+    
         move || {
-            let _ = client.clone().run_read_loop({
-                let client = client.clone();
-
-                move |packet| {
-                    // TODO: Сделать базовые приколы типа keep-alive и другое
-
-                    Ok(())
-                }
-            });
+            let _ = client.run_read_loop();
             client.close();
         }
     });
 
-    // Отключение игрока с сообщением
-    client.protocol_helper().disconnect(TextComponent::rainbow(
-        "server is in developement suka".to_string(),
-    ))?;
+    send_login(client.clone())?;
+    sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
+    send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
+    set_center_chunk(client.clone(), 0, 0)?;
+    send_example_chunk(client.clone(), 0, 0)?;
 
-    // loop {}
+    let mut ticks_alive = 0u64;
 
-    // TODO: Сделать отправку чанков
+    while client.is_alive() {
+        if ticks_alive % 200 == 0 { // 10 secs timer
+            send_keep_alive(client.clone())?;
+        }
+
+        if ticks_alive % 20 == 0 { // 1 sec timer
+            // do something
+        }
+
+        thread::sleep(Duration::from_millis(50)); // 1 tick
+        ticks_alive += 1;
+    }
 
     Ok(())
 }

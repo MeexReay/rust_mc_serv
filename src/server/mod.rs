@@ -17,7 +17,7 @@ pub mod protocol;
 // Ошибки сервера
 #[derive(Debug)]
 pub enum ServerError {
-    UnexpectedPacket,        // Неожиданный пакет
+    UnexpectedPacket(u8),        // Неожиданный пакет
     Protocol(ProtocolError), // Ошибка в протоколе при работе с rust_mc_proto
     ConnectionClosed, // Соединение закрыто, единственная ошибка которая не логируется у handle_connection
     SerTextComponent, // Ошибка при сериализации текст-компонента
@@ -25,7 +25,6 @@ pub enum ServerError {
     SerNbt,           // Ошибка при сериализации nbt
     DeNbt,            // Ошибка при десериализации nbt
     UnexpectedState, // Указывает на то что этот пакет не может быть отправлен в данном режиме (в основном через ProtocolHelper)
-    ReadLoopMode,    // Ошибка когда вызывается read_any_packet во время работы read_loop
     Other(String), // Другая ошибка, либо очень специфичная, либо хз, лучше не использовать и создавать новое поле ошибки
 }
 
