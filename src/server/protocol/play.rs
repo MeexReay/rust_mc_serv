@@ -76,12 +76,13 @@ pub fn handle_play_state(
     // ))?;
 
 	let mut packet = Packet::empty(clientbound::play::LOGIN);
-	packet.write_int(10)?; // Entity ID
+	packet.write_int(0)?; // Entity ID
 	packet.write_boolean(false)?; // Is hardcore
-	packet.write_varint(1)?; // Dimension Names
+	packet.write_varint(4)?; // Dimension Names
 	packet.write_string("minecraft:overworld")?;
-	// packet.write_string("root/minecraft:nether")?;
-	// packet.write_string("root/minecraft:the_end")?;
+	packet.write_string("minecraft:nether")?;
+	packet.write_string("minecraft:the_end")?;
+	packet.write_string("minecraft:overworld_caves")?;
 	packet.write_varint(0)?; // Max Players
 	packet.write_varint(8)?; // View Distance
 	packet.write_varint(5)?; // Simulation Distance
