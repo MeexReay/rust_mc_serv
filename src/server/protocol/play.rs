@@ -1,14 +1,13 @@
 use std::{io::Cursor, sync::Arc, thread};
 
-use log::debug;
 use rust_mc_proto::{DataWriter, Packet, read_packet};
 
-use crate::server::{ServerError, player::context::ClientContext};
+use crate::server::{data::text_component::TextComponent, player::context::ClientContext, ServerError};
 
 use super::id::*;
 
 pub fn send_update_tags(client: Arc<ClientContext>) -> Result<(), ServerError> {
-    // rewrite this hardcode bullshit
+    // TODO: rewrite this hardcode bullshit
 
     client.write_packet(&Packet::from_bytes(
         clientbound::configuration::UPDATE_TAGS,
@@ -19,7 +18,7 @@ pub fn send_update_tags(client: Arc<ClientContext>) -> Result<(), ServerError> {
 }
 
 pub fn send_registry_data(client: Arc<ClientContext>) -> Result<(), ServerError> {
-    // rewrite this hardcode bullshit
+    // TODO: rewrite this hardcode bullshit
 
     let mut registry_data = Cursor::new(include_bytes!("registry-data.bin"));
 
@@ -31,6 +30,7 @@ pub fn send_registry_data(client: Arc<ClientContext>) -> Result<(), ServerError>
     Ok(())
 }
 
+// Добавки в Configuration стейт чтобы все работало
 pub fn handle_configuration_state(
     client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
@@ -58,11 +58,8 @@ pub fn handle_configuration_state(
 pub fn handle_play_state(
     client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
-    // Отключение игрока с сообщением
-    // client.protocol_helper().disconnect(TextComponent::rainbow(
-    //     "server is in developement suka".to_string(),
-    // ))?;
 
+    // Отправка пакета Login
     let mut packet = Packet::empty(clientbound::play::LOGIN);
 
     packet.write_int(0)?; // Entity ID
@@ -102,7 +99,7 @@ pub fn handle_play_state(
                 let client = client.clone();
 
                 move |packet| {
-                    // Сделать базовые приколы типа keep-alive и другое
+                    // TODO: Сделать базовые приколы типа keep-alive и другое
 
                     Ok(())
                 }
@@ -111,9 +108,14 @@ pub fn handle_play_state(
         }
     });
 
-    loop {}
+    // Отключение игрока с сообщением
+    client.protocol_helper().disconnect(TextComponent::rainbow(
+        "server is in developement suka".to_string(),
+    ))?;
 
-    // Сделать отправку чанков
+    // loop {}
+
+    // TODO: Сделать отправку чанков
 
     Ok(())
 }
