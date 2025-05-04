@@ -6,6 +6,7 @@ mkShell {
     direnv
     rustc
     cargo
+    rustfmt
     python3
     python3Packages.beautifulsoup4
     python3Packages.requests

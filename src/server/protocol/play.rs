@@ -1,47 +1,51 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{io::Cursor, sync::Arc};
 
-use craftflow_nbt::DynNBT;
-use log::debug;
-use rust_mc_proto::{DataWriter, Packet};
-use serde_json::{json, Value};
+use rust_mc_proto::{read_packet, DataWriter, Packet};
 
 use crate::server::{
-    data::ReadWriteNBT, player::context::ClientContext, ServerError
+    player::context::ClientContext, ServerError
 };
 
-use super::id::{clientbound::{self, configuration::REGISTRY_DATA}, serverbound};
+use super::id::*;
+
+pub fn send_update_tags(
+    client: Arc<ClientContext>,
+) -> Result<(), ServerError> {
+
+    // rewrite this hardcode bullshit
+
+    client.write_packet(&Packet::from_bytes(clientbound::configuration::UPDATE_TAGS, include_bytes!("update-tags.bin")))?;
+
+    Ok(())
+}
 
 pub fn send_registry_data(
     client: Arc<ClientContext>,
 ) -> Result<(), ServerError> {
-    let registry_data = include_str!("registry_data.json");
-    let registry_data: Value = serde_json::from_str(registry_data).unwrap();
-    let registry_data = registry_data.as_object().unwrap();
 
-    for (registry_name, registry_data) in registry_data {
-        let registry_data = registry_data.as_object().unwrap();
+    // rewrite this hardcode bullshit
 
-        let mut packet = Packet::empty(clientbound::configuration::REGISTRY_DATA);
-        packet.write_string(registry_name)?;
-
-        packet.write_usize_varint(registry_data.len())?;
-
-        debug!("sending registry: {registry_name}");
-
-        for (key, value) in registry_data {
-            packet.write_string(key)?;
-            packet.write_boolean(true)?;
-
-            let mut data = Vec::new();
-            craftflow_nbt::to_writer(&mut data, value).unwrap();
-
-            debug!("- {key}");
-            
-            packet.write_bytes(&data)?;
-        }
-        
+    let mut registry_data = Cursor::new(include_bytes!("registry-data.bin"));
+    
+    while let Ok(mut packet) = read_packet(&mut registry_data, None) {
+        packet.set_id(clientbound::configuration::REGISTRY_DATA);
         client.write_packet(&packet)?;
     }
+
+    Ok(())
+}
+
+pub fn process_known_packs(
+    client: Arc<ClientContext>
+) -> Result<(), ServerError> {
+    let mut packet = Packet::empty(clientbound::configuration::KNOWN_PACKS);
+	packet.write_varint(1)?;
+	packet.write_string("minecraft")?;
+	packet.write_string("core")?;
+	packet.write_string("1.21.5")?;
+	client.write_packet(&packet)?;
+
+	client.read_packet(serverbound::configuration::KNOWN_PACKS)?;
 
     Ok(())
 }
@@ -50,15 +54,14 @@ pub fn handle_configuration_state(
     client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
 
-	let mut p = Packet::empty(clientbound::configuration::KNOWN_PACKS);
-	p.write_varint(1)?;
-	p.write_string("minecraft")?;
-	p.write_string("core")?;
-	p.write_string("1.21.5")?;
-	client.write_packet(&p)?;
-	client.read_packet(serverbound::configuration::KNOWN_PACKS)?;
+    let mut packet = Packet::empty(clientbound::configuration::FEATURE_FLAGS);
+	packet.write_varint(1)?;
+	packet.write_string("minecraft:vanilla")?;
+	client.write_packet(&packet)?;
 
+	process_known_packs(client.clone())?;
     send_registry_data(client.clone())?;
+    send_update_tags(client.clone())?;
 
     Ok(())
 }
@@ -100,7 +103,14 @@ pub fn handle_play_state(
 	packet.write_boolean(false)?; // Enforces Secure Chat
 	client.write_packet(&packet)?;
 
-    loop {}
+    loop {} 
+    
+    // TODO: отдельный поток для чтения пакетов
+
+    // TODO: переработка функции read_packet так чтобы когда 
+    // делаешь read_any_packet, пакет отправлялся сначала всем другим 
+    // функциям read_packet которые настроены на этот айди пакета,
+    // а потом если таковых не осталось пакет возвращался
 
     Ok(())
 }

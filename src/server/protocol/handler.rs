@@ -157,6 +157,11 @@ pub fn handle_connection(
                 particle_status,
             });
 
+            client.write_packet(&Packet::build(clientbound::configuration::PLUGIN_MESSAGE, |p| {
+                p.write_string("minecraft:brand")?;
+                p.write_string("rust_minecraft_server")
+            })?)?;
+
             handle_configuration_state(client.clone())?;
 
             client.write_packet(&Packet::empty(clientbound::configuration::FINISH))?;
