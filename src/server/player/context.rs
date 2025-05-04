@@ -1,9 +1,8 @@
 use std::{
-    hash::Hash,
-    net::{SocketAddr, TcpStream},
-    sync::{Arc, RwLock},
+    hash::Hash, net::{SocketAddr, TcpStream}, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Sender}, Arc, RwLock}
 };
 
+use dashmap::DashMap;
 use rust_mc_proto::{MinecraftConnection, Packet};
 use uuid::Uuid;
 
@@ -21,6 +20,8 @@ pub struct ClientContext {
     client_info: RwLock<Option<ClientInfo>>,
     player_info: RwLock<Option<PlayerInfo>>,
     state: RwLock<ConnectionState>,
+    packet_waiters: DashMap<usize, (u8, Sender<Packet>)>,
+    read_loop: AtomicBool
 }
 
 // Реализуем сравнение через адрес
@@ -39,6 +40,8 @@ impl Hash for ClientContext {
 
 impl Eq for ClientContext {}
 
+
+
 impl ClientContext {
     pub fn new(server: Arc<ServerContext>, conn: MinecraftConnection<TcpStream>) -> ClientContext {
         ClientContext {
@@ -49,6 +52,8 @@ impl ClientContext {
             client_info: RwLock::new(None),
             player_info: RwLock::new(None),
             state: RwLock::new(ConnectionState::Handshake),
+            packet_waiters: DashMap::new(),
+            read_loop: AtomicBool::new(false)
         }
     }
 
@@ -117,7 +122,7 @@ impl ClientContext {
         Ok(())
     }
 
-    pub fn read_any_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
+    pub fn run_read_loop(self: &Arc<Self>, callback: impl Fn(Packet) -> Result<(), ServerError>) -> Result<(), ServerError> {
         let state = self.state();
 
         let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
@@ -139,24 +144,79 @@ impl ClientContext {
                 packet.get_mut().set_position(0);
             }
             if !cancelled {
-                break Ok(packet);
+                let mut skip = false;
+                for (_, (id, sender)) in self.packet_waiters.clone() {
+                    if id == packet.id() {
+                        sender.send(packet.clone()).unwrap();
+                        skip = true;
+                        break;
+                    }
+                }
+                if !skip {
+                    callback(packet.clone())?;
+                }
+            }
+        }
+    }
+
+    pub fn read_any_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
+        if self.read_loop.load(Ordering::SeqCst) {
+            Err(ServerError::ReadLoopMode)
+        } else {
+            let state = self.state();
+
+            let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
+
+            loop {
+                let mut packet = conn.read_packet()?;
+                let mut cancelled = false;
+                for handler in self
+                    .server
+                    .packet_handlers(|o| o.on_incoming_packet_priority())
+                    .iter()
+                {
+                    handler.on_incoming_packet(
+                        self.clone(),
+                        &mut packet,
+                        &mut cancelled,
+                        state.clone(),
+                    )?;
+                    packet.get_mut().set_position(0);
+                }
+                if !cancelled {
+                    break Ok(packet);
+                }
             }
         }
     }
 
     pub fn read_packet(self: &Arc<Self>, id: u8) -> Result<Packet, ServerError> {
-        let packet = self.read_any_packet()?;
-        if packet.id() != id {
-            Err(ServerError::UnexpectedPacket)
+        if self.read_loop.load(Ordering::SeqCst) {
+            let (tx, rx) = mpsc::channel::<Packet>();
+
+            let key: usize = (&tx as *const Sender<Packet>).addr();
+            self.packet_waiters.insert(key, (id, tx));
+
+            loop {
+                if let Ok(packet) = rx.recv() {
+                    self.packet_waiters.remove(&key);
+                    break Ok(packet)
+                }
+            }
         } else {
-            Ok(packet)
+            let packet = self.read_any_packet()?;
+
+            if packet.id() != id {
+                Err(ServerError::UnexpectedPacket)
+            } else {
+                Ok(packet)
+            }
         }
     }
 
     pub fn close(self: &Arc<Self>) {
         self.conn.write().unwrap().close();
     }
-
     pub fn set_compression(self: &Arc<Self>, threshold: Option<usize>) {
         self.conn.write().unwrap().set_compression(threshold);
     }

@@ -8,7 +8,11 @@ use rust_mc_proto::{DataReader, DataWriter, Packet};
 
 use crate::trigger_event;
 
-use super::{id::*, play::{handle_configuration_state, handle_play_state}, ConnectionState};
+use super::{
+    ConnectionState,
+    id::*,
+    play::{handle_configuration_state, handle_play_state},
+};
 
 pub fn handle_connection(
     client: Arc<ClientContext>, // Контекст клиента
@@ -157,10 +161,13 @@ pub fn handle_connection(
                 particle_status,
             });
 
-            client.write_packet(&Packet::build(clientbound::configuration::PLUGIN_MESSAGE, |p| {
-                p.write_string("minecraft:brand")?;
-                p.write_string("rust_minecraft_server")
-            })?)?;
+            client.write_packet(&Packet::build(
+                clientbound::configuration::PLUGIN_MESSAGE,
+                |p| {
+                    p.write_string("minecraft:brand")?;
+                    p.write_string("rust_minecraft_server")
+                },
+            )?)?;
 
             handle_configuration_state(client.clone())?;
 

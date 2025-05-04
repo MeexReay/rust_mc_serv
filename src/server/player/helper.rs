@@ -53,7 +53,7 @@ impl ProtocolHelper {
             match self.state {
                 ConnectionState::Configuration => clientbound::configuration::STORE_COOKIE,
                 ConnectionState::Play => clientbound::play::STORE_COOKIE,
-                _ => { return Err(ServerError::UnexpectedState) },
+                _ => return Err(ServerError::UnexpectedState),
             },
             |p| {
                 p.write_string(id)?;
@@ -159,7 +159,7 @@ impl ProtocolHelper {
                 };
 
                 Ok(data)
-            },
+            }
             ConnectionState::Play => {
                 let mut packet = Packet::empty(clientbound::play::COOKIE_REQUEST);
                 packet.write_string(id)?;
