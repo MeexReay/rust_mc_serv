@@ -1,5 +1,11 @@
 use std::{
-    hash::Hash, net::{SocketAddr, TcpStream}, sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Sender}, Arc, RwLock}
+    hash::Hash,
+    net::{SocketAddr, TcpStream},
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Sender},
+    },
 };
 
 use dashmap::DashMap;
@@ -21,7 +27,7 @@ pub struct ClientContext {
     player_info: RwLock<Option<PlayerInfo>>,
     state: RwLock<ConnectionState>,
     packet_waiters: DashMap<usize, (u8, Sender<Packet>)>,
-    read_loop: AtomicBool
+    read_loop: AtomicBool,
 }
 
 // Реализуем сравнение через адрес
@@ -40,8 +46,6 @@ impl Hash for ClientContext {
 
 impl Eq for ClientContext {}
 
-
-
 impl ClientContext {
     pub fn new(server: Arc<ServerContext>, conn: MinecraftConnection<TcpStream>) -> ClientContext {
         ClientContext {
@@ -53,7 +57,7 @@ impl ClientContext {
             player_info: RwLock::new(None),
             state: RwLock::new(ConnectionState::Handshake),
             packet_waiters: DashMap::new(),
-            read_loop: AtomicBool::new(false)
+            read_loop: AtomicBool::new(false),
         }
     }
 
@@ -122,7 +126,10 @@ impl ClientContext {
         Ok(())
     }
 
-    pub fn run_read_loop(self: &Arc<Self>, callback: impl Fn(Packet) -> Result<(), ServerError>) -> Result<(), ServerError> {
+    pub fn run_read_loop(
+        self: &Arc<Self>,
+        callback: impl Fn(Packet) -> Result<(), ServerError>,
+    ) -> Result<(), ServerError> {
         let state = self.state();
 
         let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
@@ -200,7 +207,7 @@ impl ClientContext {
             loop {
                 if let Ok(packet) = rx.recv() {
                     self.packet_waiters.remove(&key);
-                    break Ok(packet)
+                    break Ok(packet);
                 }
             }
         } else {
