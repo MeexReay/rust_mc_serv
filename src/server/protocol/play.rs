@@ -2,7 +2,7 @@ use std::{io::Cursor, sync::Arc, thread, time::{Duration, SystemTime, UNIX_EPOCH
 
 use rust_mc_proto::{DataWriter, Packet, read_packet};
 
-use crate::server::{player::context::ClientContext, ServerError};
+use crate::server::{data::{text_component::TextComponent, ReadWriteNBT}, player::context::ClientContext, ServerError};
 
 use super::id::*;
 
@@ -122,8 +122,6 @@ pub fn sync_player_pos(
 
     client.write_packet(&packet)?;
 
-    client.read_packet(serverbound::play::CONFIRM_TELEPORTATION)?;
-
     Ok(())
 }
 
@@ -216,6 +214,13 @@ pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
     Ok(())
 }
 
+pub fn send_system_message(client: Arc<ClientContext>, message: TextComponent, is_action_bar: bool) -> Result<(), ServerError> {
+    let mut packet = Packet::empty(clientbound::play::SYSTEM_CHAT_MESSAGE);
+    packet.write_nbt(&message)?;
+    packet.write_boolean(is_action_bar)?;
+    client.write_packet(&packet)
+}
+
 // Отдельная функция для работы с самой игрой
 pub fn handle_play_state(
     client: Arc<ClientContext>, // Контекст клиента
@@ -246,6 +251,8 @@ pub fn handle_play_state(
         if ticks_alive % 20 == 0 { // 1 sec timer
             // do something
         }
+
+        send_system_message(client.clone(), TextComponent::rainbow(format!("Ticks alive: {}", ticks_alive)), true)?;
 
         thread::sleep(Duration::from_millis(50)); // 1 tick
         ticks_alive += 1;

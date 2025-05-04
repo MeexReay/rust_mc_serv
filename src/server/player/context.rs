@@ -4,7 +4,7 @@ use std::{
     }, thread, time::Duration
 };
 
-use rust_mc_proto::{MinecraftConnection, Packet, ProtocolError};
+use rust_mc_proto::{MinecraftConnection, Packet};
 use uuid::Uuid;
 
 use crate::server::{ServerError, context::ServerContext, protocol::ConnectionState};
@@ -120,11 +120,8 @@ impl ClientContext {
         if !cancelled {
             match self.conn.write().unwrap().write_packet(&packet) {
                 Ok(_) => {},
-                Err(ProtocolError::ConnectionClosedError) => {
-                    self.is_alive.store(false, Ordering::SeqCst);
-                    return Err(ServerError::ConnectionClosed);
-                },
                 Err(e) => {
+                    self.is_alive.store(false, Ordering::SeqCst);
                     return Err(e.into());
                 }
             };
@@ -139,14 +136,11 @@ impl ClientContext {
 
         let mut conn = self.conn.read().unwrap().try_clone()?; // так можно делать т.к сокет это просто поинтер
 
-        loop {
+        while self.is_alive() {
             let mut packet = match conn.read_packet() {
                 Ok(v) => v,
-                Err(ProtocolError::ConnectionClosedError) => {
-                    self.is_alive.store(false, Ordering::SeqCst);
-                    return Err(ServerError::ConnectionClosed);
-                },
                 Err(e) => {
+                    self.is_alive.store(false, Ordering::SeqCst);
                     return Err(e.into());
                 }
             };
@@ -169,6 +163,8 @@ impl ClientContext {
                 self.packet_buffer.lock().unwrap().push_back(packet);
             }
         }
+
+        Ok(())
     }
 
     pub fn read_any_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
@@ -185,11 +181,8 @@ impl ClientContext {
             loop {
                 let mut packet = match self.conn.write().unwrap().read_packet() {
                     Ok(v) => v,
-                    Err(ProtocolError::ConnectionClosedError) => {
-                        self.is_alive.store(false, Ordering::SeqCst);
-                        return Err(ServerError::ConnectionClosed);
-                    },
                     Err(e) => {
+                        self.is_alive.store(false, Ordering::SeqCst);
                         return Err(e.into());
                     }
                 };
@@ -231,11 +224,8 @@ impl ClientContext {
         } else {
             let packet = match self.read_any_packet() {
                 Ok(v) => v,
-                Err(ServerError::ConnectionClosed) => {
-                    self.is_alive.store(false, Ordering::SeqCst);
-                    return Err(ServerError::ConnectionClosed);
-                },
                 Err(e) => {
+                    self.is_alive.store(false, Ordering::SeqCst);
                     return Err(e);
                 }
             };
