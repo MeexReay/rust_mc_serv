@@ -106,7 +106,7 @@ pub fn sync_player_pos(
     flags: i32
 ) -> Result<(), ServerError> {
     let timestamp = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() & 0xFFFFFFFF) as i32;
-    
+
     let mut packet = Packet::empty(clientbound::play::SYNCHRONIZE_PLAYER_POSITION);
 
     packet.write_varint(timestamp)?;
@@ -209,7 +209,12 @@ pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
     packet.write_long(timestamp)?;
     client.write_packet(&packet)?;
 
-    client.read_packet(serverbound::play::KEEP_ALIVE)?;
+    // let mut packet = client.read_packet(serverbound::play::KEEP_ALIVE)?;
+	// let timestamp2 = packet.read_long()?;
+	// if timestamp2 != timestamp {
+	// 	// Послать клиента нахуй
+	// 	println!("KeepAlive Error")
+	// }
 
     Ok(())
 }
@@ -228,7 +233,7 @@ pub fn handle_play_state(
 
     thread::spawn({
         let client = client.clone();
-    
+
         move || {
             let _ = client.run_read_loop();
             client.close();
@@ -243,7 +248,7 @@ pub fn handle_play_state(
 
     thread::spawn({
         let client = client.clone();
-    
+
         move || -> Result<(), ServerError> {
             while client.is_alive() {
                 let mut packet = client.read_any_packet()?;
@@ -254,9 +259,9 @@ pub fn handle_play_state(
                         let y = packet.read_double()?;
                         let z = packet.read_double()?;
                         let _ = packet.read_byte()?; // flags
-    
+
                         client.set_position((x, y, z));
-                    }, 
+                    },
                     serverbound::play::SET_PLAYER_POSITION_AND_ROTATION => {
                         let x = packet.read_double()?;
                         let y = packet.read_double()?;
@@ -264,7 +269,7 @@ pub fn handle_play_state(
                         let yaw = packet.read_float()?;
                         let pitch = packet.read_float()?;
                         let _ = packet.read_byte()?; // flags
-    
+
                         client.set_position((x, y, z));
                         client.set_rotation((yaw, pitch));
                     },
@@ -272,7 +277,7 @@ pub fn handle_play_state(
                         let yaw = packet.read_float()?;
                         let pitch = packet.read_float()?;
                         let _ = packet.read_byte()?; // flags
-    
+
                         client.set_rotation((yaw, pitch));
                     },
                     _ => {}
@@ -286,6 +291,7 @@ pub fn handle_play_state(
     let mut ticks_alive = 0u64;
 
     while client.is_alive() {
+		println!("{ticks_alive}");
         if ticks_alive % 200 == 0 { // 10 secs timer
             send_keep_alive(client.clone())?;
         }
@@ -293,9 +299,9 @@ pub fn handle_play_state(
         if ticks_alive % 20 == 0 { // 1 sec timer
             let (x, y, z) = client.position();
 
-            send_system_message(client.clone(), 
+            send_system_message(client.clone(),
                 TextComponent::rainbow(format!(
-                    "Pos: {} {} {}", x as u64, y as u64, z as u64
+                    "Pos: {} {} {}", x as i64, y as i64, z as i64
                 )), false)?;
         }
 
@@ -304,6 +310,7 @@ pub fn handle_play_state(
         thread::sleep(Duration::from_millis(50)); // 1 tick
         ticks_alive += 1;
     }
+	println!("Client die");
 
     Ok(())
 }
