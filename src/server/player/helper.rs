@@ -70,7 +70,7 @@ impl ProtocolHelper {
                 self.client
                     .write_packet(&Packet::empty(clientbound::configuration::FINISH))?;
                 self.client
-                    .read_packet(serverbound::configuration::ACKNOWLEDGE_FINISH)?;
+                    .read_packet(&[serverbound::configuration::ACKNOWLEDGE_FINISH])?;
                 self.client.set_state(ConnectionState::Play)?;
                 Ok(())
             }
@@ -85,7 +85,7 @@ impl ProtocolHelper {
                 self.client
                     .write_packet(&Packet::empty(clientbound::play::START_CONFIGURATION))?;
                 self.client
-                    .read_packet(serverbound::play::ACKNOWLEDGE_CONFIGURATION)?;
+                    .read_packet(&[serverbound::play::ACKNOWLEDGE_CONFIGURATION])?;
                 self.client.set_state(ConnectionState::Configuration)?;
                 Ok(())
             }
@@ -100,14 +100,14 @@ impl ProtocolHelper {
                 let time = SystemTime::now();
                 self.client
                     .write_packet(&Packet::empty(clientbound::play::PING))?;
-                self.client.read_packet(serverbound::play::PONG)?;
+                self.client.read_packet(&[serverbound::play::PONG])?;
                 Ok(SystemTime::now().duration_since(time).unwrap())
             }
             ConnectionState::Configuration => {
                 let time = SystemTime::now();
                 self.client
                     .write_packet(&Packet::empty(clientbound::configuration::PING))?;
-                self.client.read_packet(serverbound::configuration::PONG)?;
+                self.client.read_packet(&[serverbound::configuration::PONG])?;
                 Ok(SystemTime::now().duration_since(time).unwrap())
             }
             _ => Err(ServerError::UnexpectedState),
@@ -149,7 +149,7 @@ impl ProtocolHelper {
 
                 let mut packet = self
                     .client
-                    .read_packet(serverbound::configuration::COOKIE_RESPONSE)?;
+                    .read_packet(&[serverbound::configuration::COOKIE_RESPONSE])?;
                 packet.read_string()?;
                 let data = if packet.read_boolean()? {
                     let n = packet.read_usize_varint()?;
@@ -167,7 +167,7 @@ impl ProtocolHelper {
 
                 let mut packet = self
                     .client
-                    .read_packet(serverbound::play::COOKIE_RESPONSE)?;
+                    .read_packet(&[serverbound::play::COOKIE_RESPONSE])?;
                 packet.read_string()?;
                 let data = if packet.read_boolean()? {
                     let n = packet.read_usize_varint()?;
@@ -199,7 +199,7 @@ impl ProtocolHelper {
 
                 let mut packet = self
                     .client
-                    .read_packet(serverbound::login::PLUGIN_RESPONSE)?;
+                    .read_packet(&[serverbound::login::PLUGIN_RESPONSE])?;
                 let identifier = packet.read_varint()?;
                 let data = if packet.read_boolean()? {
                     let mut data = Vec::new();

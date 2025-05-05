@@ -44,7 +44,7 @@ pub fn handle_configuration_state(
     packet.write_string("1.21.5")?;
     client.write_packet(&packet)?;
 
-    client.read_packet(serverbound::configuration::KNOWN_PACKS)?;
+    client.read_packet(&[serverbound::configuration::KNOWN_PACKS])?;
 
     send_registry_data(client.clone())?;
     send_update_tags(client.clone())
@@ -209,7 +209,7 @@ pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
     packet.write_long(timestamp)?;
     client.write_packet(&packet)?;
 
-    let mut packet = client.read_packet(serverbound::play::KEEP_ALIVE)?;
+    let mut packet = client.read_packet(&[serverbound::play::KEEP_ALIVE])?;
 	let timestamp2 = packet.read_long()?;
 	if timestamp2 != timestamp {
 		// Послать клиента нахуй
@@ -283,7 +283,7 @@ pub fn handle_play_state(
                         client.set_rotation((yaw, pitch));
                     },
                     _ => {
-						client.push_back(packet);
+						client.push_packet_back(packet);
 					}
                 }
             }

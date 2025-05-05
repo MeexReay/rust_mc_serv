@@ -197,13 +197,14 @@ impl ClientContext {
         Ok(())
     }
 
+    /// Please avoid using of this bullshit
     pub fn read_any_packet(self: &Arc<Self>) -> Result<Packet, ServerError> {
         if self.read_loop.load(Ordering::SeqCst) {
             loop {
                 if let Some(packet) = self.packet_buffer.lock().unwrap().pop_front() {
                     return Ok(packet);
                 }
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(4));
             }
         } else {
             let state = self.state();
@@ -237,19 +238,19 @@ impl ClientContext {
         }
     }
 
-    pub fn read_packet(self: &Arc<Self>, id: u8) -> Result<Packet, ServerError> {
+    pub fn read_packet(self: &Arc<Self>, ids: &[u8]) -> Result<Packet, ServerError> {
         if self.read_loop.load(Ordering::SeqCst) {
             loop {
                 {
                     let mut locked = self.packet_buffer.lock().unwrap();
                     for (i, packet) in locked.clone().iter().enumerate() {
-                        if packet.id() == id {
+                        if ids.contains(&packet.id()) {
                             locked.remove(i);
                             return Ok(packet.clone());
                         }
                     }
                 }
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_millis(4));
             }
         } else {
             let packet = match self.read_any_packet() {
@@ -260,7 +261,7 @@ impl ClientContext {
                 }
             };
 
-            if packet.id() != id {
+            if ids.contains(&packet.id()) {
                 Err(ServerError::UnexpectedPacket(packet.id()))
             } else {
                 Ok(packet)
@@ -268,7 +269,7 @@ impl ClientContext {
         }
     }
 
-	pub fn push_back(self: &Arc<Self>, packet: Packet){
+	pub fn push_packet_back(self: &Arc<Self>, packet: Packet){
 		self.packet_buffer.lock().unwrap().push_back(packet)
 	}
 

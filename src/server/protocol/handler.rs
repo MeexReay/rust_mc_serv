@@ -21,7 +21,7 @@ pub fn handle_connection(
     // Получение пакетов производится через client.conn(),
     // ВАЖНО: не помещать сам client.conn() в переменные,
     // он должен сразу убиваться иначе соединение гдето задедлочится
-    let mut packet = client.read_packet(serverbound::handshake::HANDSHAKE)?;
+    let mut packet = client.read_packet(&[serverbound::handshake::HANDSHAKE])?;
 
     let protocol_version = packet.read_varint()?; // Получаем версия протокола, может быть отрицательным если наш клиент дэбил
     let server_address = packet.read_string()?; // Получаем домен/адрес сервера к которому пытается подключиться клиент, например "play.example.com", а не айпи
@@ -86,7 +86,7 @@ pub fn handle_connection(
             client.set_state(ConnectionState::Login)?; // Мы находимся в режиме Login
 
             // Читаем пакет Login Start
-            let mut packet = client.read_packet(serverbound::login::START)?;
+            let mut packet = client.read_packet(&[serverbound::login::START])?;
 
             let name = packet.read_string()?;
             let uuid = packet.read_uuid()?;
@@ -115,14 +115,14 @@ pub fn handle_connection(
                 p.write_varint(0)
             })?)?;
 
-            client.read_packet(serverbound::login::ACKNOWLEDGED)?; // Пакет Login Acknowledged
+            client.read_packet(&[serverbound::login::ACKNOWLEDGED])?; // Пакет Login Acknowledged
 
             client.set_state(ConnectionState::Configuration)?; // Мы перешли в режим Configuration
 
             // Получение бренда клиента из Serverbound Plugin Message
             // Identifier канала откуда берется бренд: minecraft:brand
             let brand = loop {
-                let mut packet = client.read_packet(serverbound::configuration::PLUGIN_MESSAGE)?; // Пакет Serverbound Plugin Message
+                let mut packet = client.read_packet(&[serverbound::configuration::PLUGIN_MESSAGE])?; // Пакет Serverbound Plugin Message
 
                 let identifier = packet.read_string()?;
 
@@ -136,7 +136,7 @@ pub fn handle_connection(
                 }
             };
 
-            let mut packet = client.read_packet(serverbound::configuration::CLIENT_INFORMATION)?; // Пакет Client Information
+            let mut packet = client.read_packet(&[serverbound::configuration::CLIENT_INFORMATION])?; // Пакет Client Information
 
             let locale = packet.read_string()?; // for example: en_us
             let view_distance = packet.read_signed_byte()?; // client-side render distance in chunks
@@ -172,7 +172,7 @@ pub fn handle_connection(
             handle_configuration_state(client.clone())?;
 
             client.write_packet(&Packet::empty(clientbound::configuration::FINISH))?;
-            client.read_packet(serverbound::configuration::ACKNOWLEDGE_FINISH)?;
+            client.read_packet(&[serverbound::configuration::ACKNOWLEDGE_FINISH])?;
 
             client.set_state(ConnectionState::Play)?; // Мы перешли в режим Play
 
