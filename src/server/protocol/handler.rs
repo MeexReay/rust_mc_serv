@@ -14,6 +14,8 @@ use super::{
 	play::{handle_configuration_state, handle_play_state},
 };
 
+pub const BRAND: &str = "rust_mc_serv";
+
 pub fn handle_connection(
 	client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
@@ -165,7 +167,7 @@ pub fn handle_connection(
 				clientbound::configuration::PLUGIN_MESSAGE,
 				|p| {
 					p.write_string("minecraft:brand")?;
-					p.write_string("rust_minecraft_server")
+					p.write_string(BRAND)
 				},
 			)?)?;
 
