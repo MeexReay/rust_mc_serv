@@ -4,9 +4,9 @@ pub mod play;
 
 #[derive(Debug, Clone)]
 pub enum ConnectionState {
-    Handshake,
-    Status,
-    Login,
-    Configuration,
-    Play,
+	Handshake,
+	Status,
+	Login,
+	Configuration,
+	Play,
 }
