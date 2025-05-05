@@ -231,12 +231,10 @@ pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	let timestamp2 = packet.read_long()?;
 	if timestamp2 != timestamp {
 		// Послать клиента нахуй
-		println!("KeepAlive Err")
+		Err(ServerError::UnexpectedPacket(serverbound::play::KEEP_ALIVE))
 	} else {
-		println!("KeepAlive Ok")
+		Ok(())
 	}
-
-	Ok(())
 }
 
 pub fn send_system_message(
@@ -267,7 +265,12 @@ pub fn handle_play_state(
 	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
 	set_center_chunk(client.clone(), 0, 0)?;
-	send_example_chunk(client.clone(), 0, 0)?;
+
+	for x in -1..=1 {
+		for z in -1..=1 {
+			send_example_chunk(client.clone(), x, z)?;
+		}
+	}
 
 	thread::spawn({
 		let client = client.clone();
