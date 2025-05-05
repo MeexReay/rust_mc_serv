@@ -37,12 +37,12 @@ macro_rules! trigger_event {
 }
 
 pub trait Listener: Sync + Send {
-    generate_handlers!(status, &mut String);
-    generate_handlers!(plugin_message, &str, &[u8]);
+	generate_handlers!(status, &mut String);
+	generate_handlers!(plugin_message, &str, &[u8]);
 }
 
 pub trait PacketHandler: Sync + Send {
-    generate_handlers!(incoming_packet, &mut Packet, &mut bool, ConnectionState);
-    generate_handlers!(outcoming_packet, &mut Packet, &mut bool, ConnectionState);
-    generate_handlers!(state, ConnectionState);
+	generate_handlers!(incoming_packet, &mut Packet, &mut bool, ConnectionState);
+	generate_handlers!(outcoming_packet, &mut Packet, &mut bool, ConnectionState);
+	generate_handlers!(state, ConnectionState);
 }
