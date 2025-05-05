@@ -316,7 +316,6 @@ pub fn handle_play_state(
 	let mut ticks_alive = 0u64;
 
 	while client.is_alive() {
-		println!("{ticks_alive}");
 		if ticks_alive % 200 == 0 {
 			// 10 secs timer
 			send_keep_alive(client.clone())?;
@@ -342,7 +341,6 @@ pub fn handle_play_state(
 		thread::sleep(Duration::from_millis(50)); // 1 tick
 		ticks_alive += 1;
 	}
-	println!("Client die");
 
 	Ok(())
 }
