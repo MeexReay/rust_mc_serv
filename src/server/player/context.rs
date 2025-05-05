@@ -251,9 +251,9 @@ impl ClientContext {
 			};
 
 			if ids.contains(&packet.id()) {
-				Err(ServerError::UnexpectedPacket(packet.id()))
-			} else {
 				Ok(packet)
+			} else {
+				Err(ServerError::UnexpectedPacket(packet.id()))
 			}
 		}
 	}
