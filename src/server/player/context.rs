@@ -268,6 +268,10 @@ impl ClientContext {
         }
     }
 
+	pub fn push_back(self: &Arc<Self>, packet: Packet){
+		self.packet_buffer.lock().unwrap().push_back(packet)
+	}
+
     pub fn close(self: &Arc<Self>) {
         self.conn.write().unwrap().close();
     }

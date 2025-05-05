@@ -209,12 +209,14 @@ pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
     packet.write_long(timestamp)?;
     client.write_packet(&packet)?;
 
-    // let mut packet = client.read_packet(serverbound::play::KEEP_ALIVE)?;
-	// let timestamp2 = packet.read_long()?;
-	// if timestamp2 != timestamp {
-	// 	// Послать клиента нахуй
-	// 	println!("KeepAlive Error")
-	// }
+    let mut packet = client.read_packet(serverbound::play::KEEP_ALIVE)?;
+	let timestamp2 = packet.read_long()?;
+	if timestamp2 != timestamp {
+		// Послать клиента нахуй
+		println!("KeepAlive Err")
+	} else {
+		println!("KeepAlive Ok")
+	}
 
     Ok(())
 }
@@ -280,7 +282,9 @@ pub fn handle_play_state(
 
                         client.set_rotation((yaw, pitch));
                     },
-                    _ => {}
+                    _ => {
+						client.push_back(packet);
+					}
                 }
             }
 
