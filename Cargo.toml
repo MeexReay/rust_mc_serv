@@ -1,5 +1,5 @@
 [package]
-name = "rust_minecraft_server"
+name = "rust_mc_serv"
 version = "0.1.0"
 edition = "2024"
 
