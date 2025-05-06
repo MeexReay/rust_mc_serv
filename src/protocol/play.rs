@@ -177,7 +177,7 @@ pub fn send_example_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<
 
 		// blocks paletted container
 		chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
-		chunk_data.write_varint(1)?; // block state id in the registry (1 for stone)
+		chunk_data.write_varint(10)?; // block state id in the registry (1 for stone)
 
 		// biomes palleted container
 		chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
