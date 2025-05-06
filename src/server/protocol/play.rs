@@ -231,7 +231,7 @@ pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	let timestamp2 = packet.read_long()?;
 	if timestamp2 != timestamp {
 		// Послать клиента нахуй
-		Err(ServerError::UnexpectedPacket(serverbound::play::KEEP_ALIVE))
+		Err(ServerError::WrongPacket)
 	} else {
 		Ok(())
 	}
@@ -246,6 +246,24 @@ pub fn send_system_message(
 	packet.write_nbt(&message)?;
 	packet.write_boolean(is_action_bar)?;
 	client.write_packet(&packet)
+}
+
+pub fn send_example_chunks_in_distance(
+	client: Arc<ClientContext>,
+	chunks: &mut Vec<(i32, i32)>,
+	distance: i32,
+	center: (i32, i32),
+) -> Result<(), ServerError> {
+	for x in -distance + center.0..=distance + center.0 {
+		for z in -distance + center.1..=distance + center.1 {
+			if !chunks.contains(&(x, z)) {
+				send_example_chunk(client.clone(), x as i32, z as i32)?;
+				chunks.push((x, z));
+			}
+		}
+	}
+
+	Ok(())
 }
 
 // Отдельная функция для работы с самой игрой
@@ -266,11 +284,11 @@ pub fn handle_play_state(
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
 	set_center_chunk(client.clone(), 0, 0)?;
 
-	for x in -1..=1 {
-		for z in -1..=1 {
-			send_example_chunk(client.clone(), x, z)?;
-		}
-	}
+	let mut chunks = Vec::new();
+
+	let view_distance = client.client_info().unwrap().view_distance as i32;
+
+	send_example_chunks_in_distance(client.clone(), &mut chunks, view_distance, (0, 0))?;
 
 	thread::spawn({
 		let client = client.clone();
@@ -327,6 +345,17 @@ pub fn handle_play_state(
 		if ticks_alive % 20 == 0 {
 			// 1 sec timer
 			let (x, y, z) = client.position();
+
+			let (chunk_x, chunk_z) = ((x / 16.0) as i64, (z / 16.0) as i64);
+			let (chunk_x, chunk_z) = (chunk_x as i32, chunk_z as i32);
+
+			set_center_chunk(client.clone(), chunk_x, chunk_z)?;
+			send_example_chunks_in_distance(
+				client.clone(),
+				&mut chunks,
+				view_distance,
+				(chunk_x, chunk_z),
+			)?;
 
 			send_system_message(
 				client.clone(),

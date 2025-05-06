@@ -18,6 +18,7 @@ pub mod protocol;
 #[derive(Debug)]
 pub enum ServerError {
 	UnexpectedPacket(u8),    // Неожиданный пакет
+	WrongPacket,             // Пакет поломан, неверные данные
 	Protocol(ProtocolError), // Ошибка в протоколе при работе с rust_mc_proto
 	ConnectionClosed, // Соединение закрыто, единственная ошибка которая не логируется у handle_connection
 	SerTextComponent, // Ошибка при сериализации текст-компонента
