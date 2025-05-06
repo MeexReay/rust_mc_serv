@@ -107,30 +107,30 @@ pub fn start_server(server: Arc<ServerContext>) {
 }
 
 // server start helper
-pub struct Server {
-	context: Arc<ServerContext>,
-}
+// pub struct Server {
+// 	context: Arc<ServerContext>,
+// }
 
-impl Server {
-	pub fn new(context: ServerContext) -> Self {
-		Self {
-			context: Arc::new(context),
-		}
-	}
+// impl Server {
+// 	pub fn new(context: ServerContext) -> Self {
+// 		Self {
+// 			context: Arc::new(context),
+// 		}
+// 	}
 
-	pub fn context(&self) -> &ServerContext {
-		&self.context
-	}
+// 	pub fn context(&self) -> &ServerContext {
+// 		&self.context
+// 	}
 
-	pub fn start(&self) {
-		start_server(self.context.clone());
-	}
-}
+// 	pub fn start(&self) {
+// 		start_server(self.context.clone());
+// 	}
+// }
 
-impl Default for Server {
-	fn default() -> Self {
-		Self {
-			context: Arc::new(ServerContext::new(Arc::new(Config::default()))),
-		}
-	}
-}
+// impl Default for Server {
+// 	fn default() -> Self {
+// 		Self {
+// 			context: Arc::new(ServerContext::new(Arc::new(Config::default()))),
+// 		}
+// 	}
+// }
