@@ -30,6 +30,28 @@ cargo run
 cargo build -r
 ```
 
+### Использовать как библиотеку
+
+Вы можете использовать проект как библиотеку для своих серверов
+
+Пример добавления в `Cargo.toml`:
+
+```toml
+rust_mc_serv = { git = "https://github.com/GIKExe/rust_minecraft_server.git" }
+```
+
+Пример запуска сервера:
+
+```rust
+let config = Arc::new(Config::default());
+let mut server = ServerContext::new(config);
+
+server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
+server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера
+
+start_server(Arc::new(server));
+```
+
 ## Конфигурация
 
 По умолчанию, конфиг будет создан в файле `config.toml` в рабочей директории. Чтобы изменить этот путь, укажите его в первом аргументе к серверу, пример: `./rust_mc_serv /path/to/config.toml`
