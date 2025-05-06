@@ -6,7 +6,7 @@ use std::{
 
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 
-use crate::server::{
+use crate::{
 	ServerError,
 	data::{ReadWriteNBT, text_component::TextComponent},
 	protocol::{

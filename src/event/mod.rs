@@ -1,6 +1,7 @@
 use rust_mc_proto::Packet;
 
-use super::protocol::ConnectionState;
+use super::{ServerError, player::context::ClientContext, protocol::ConnectionState};
+use std::sync::Arc;
 
 #[macro_export]
 macro_rules! generate_handlers {
@@ -10,7 +11,7 @@ macro_rules! generate_handlers {
                 0
             }
 
-            fn [<on_ $name>](&self, _: std::sync::Arc<crate::server::player::context::ClientContext> $(, _: $arg_ty)*) -> Result<(), crate::server::ServerError> {
+            fn [<on_ $name>](&self, _: Arc<ClientContext> $(, _: $arg_ty)*) -> Result<(), ServerError> {
                 Ok(())
             }
         }

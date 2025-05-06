@@ -13,9 +13,8 @@ use std::{
 use rust_mc_proto::{MinecraftConnection, Packet};
 use uuid::Uuid;
 
-use crate::server::{ServerError, context::ServerContext, protocol::ConnectionState};
-
 use super::helper::ProtocolHelper;
+use crate::{ServerError, context::ServerContext, protocol::ConnectionState};
 
 // Клиент контекст
 // Должен быть обернут в Arc для передачи между потоками

@@ -7,7 +7,7 @@ use std::{
 
 use rust_mc_proto::{DataReader, DataWriter, Packet, read_packet};
 
-use crate::server::{
+use crate::{
 	ServerError,
 	data::{ReadWriteNBT, text_component::TextComponent},
 	player::context::ClientContext,

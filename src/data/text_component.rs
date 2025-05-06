@@ -5,7 +5,7 @@ use rust_mc_proto::Packet;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use crate::server::ServerError;
+use crate::ServerError;
 
 use super::ReadWriteNBT;
 

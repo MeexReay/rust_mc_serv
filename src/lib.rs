@@ -1,5 +1,6 @@
 use std::{error::Error, fmt::Display, net::TcpListener, sync::Arc, thread, time::Duration};
 
+use config::Config;
 use context::ServerContext;
 use ignore_result::Ignore;
 use log::{error, info};
@@ -102,5 +103,34 @@ pub fn start_server(server: Arc<ServerContext>) {
 
 			info!("Отключение: {}", addr);
 		});
+	}
+}
+
+// server start helper
+pub struct Server {
+	context: Arc<ServerContext>,
+}
+
+impl Server {
+	pub fn new(context: ServerContext) -> Self {
+		Self {
+			context: Arc::new(context),
+		}
+	}
+
+	pub fn context(&self) -> &ServerContext {
+		&self.context
+	}
+
+	pub fn start(&self) {
+		start_server(self.context.clone());
+	}
+}
+
+impl Default for Server {
+	fn default() -> Self {
+		Self {
+			context: Arc::new(ServerContext::new(Arc::new(Config::default()))),
+		}
 	}
 }

@@ -2,7 +2,7 @@ use std::{env::args, path::PathBuf, sync::Arc};
 
 use log::{debug, error, info};
 use rust_mc_proto::Packet;
-use server::{
+use rust_mc_serv::{
 	ServerError,
 	config::Config,
 	context::ServerContext,
@@ -12,8 +12,6 @@ use server::{
 	protocol::ConnectionState,
 	start_server,
 };
-
-pub mod server;
 
 struct ExampleListener;
 
