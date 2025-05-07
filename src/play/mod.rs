@@ -119,7 +119,7 @@ pub fn send_example_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<
 
 		// blocks paletted container
 		chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
-		chunk_data.write_varint(10)?; // block state id in the registry (1 for stone, 10 for dirt)
+		chunk_data.write_varint(57)?; // block state id in the registry (https://minecraft-ids.grahamedgecombe.com/)
 
 		// biomes palleted container
 		chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
@@ -274,6 +274,7 @@ pub fn handle_play_state(
 	send_login(client.clone())?;
 	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
+	send_game_event(client.clone(), 3, 1.0)?; // 3 - Set gamemode, 1.0 - creative
 	set_center_chunk(client.clone(), 0, 0)?;
 
 	let mut chunks = Vec::new();
@@ -335,8 +336,6 @@ pub fn handle_play_state(
 
 						if let Some(extra) = &mut message.extra {
 							extra.push(text_message);
-						} else {
-							message.extra = Some(vec![text_message]);
 						}
 
 						for player in client.server.players() {
