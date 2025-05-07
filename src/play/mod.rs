@@ -213,7 +213,7 @@ pub fn send_example_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<
 
 		// blocks paletted container
 		chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
-		chunk_data.write_varint(10)?; // block state id in the registry (1 for stone)
+		chunk_data.write_varint(10)?; // block state id in the registry (1 for stone, 10 for dirt)
 
 		// biomes palleted container
 		chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
@@ -284,20 +284,37 @@ pub fn send_system_message(
 	client.write_packet(&packet)
 }
 
+pub fn send_unload_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<(), ServerError> {
+	let mut packet = Packet::empty(clientbound::play::UNLOAD_CHUNK);
+	packet.write_int(z)?;
+	packet.write_int(x)?;
+	client.write_packet(&packet)
+}
+
 pub fn send_example_chunks_in_distance(
 	client: Arc<ClientContext>,
 	chunks: &mut Vec<(i32, i32)>,
 	distance: i32,
 	center: (i32, i32),
 ) -> Result<(), ServerError> {
+	let mut new_chunks = Vec::new();
+
 	for x in -distance + center.0..=distance + center.0 {
 		for z in -distance + center.1..=distance + center.1 {
 			if !chunks.contains(&(x, z)) {
 				send_example_chunk(client.clone(), x as i32, z as i32)?;
-				chunks.push((x, z));
 			}
+			new_chunks.push((x, z));
 		}
 	}
+
+	for (x, z) in chunks.iter() {
+		if !new_chunks.contains(&(*x, *z)) {
+			send_unload_chunk(client.clone(), *x, *z)?;
+		}
+	}
+
+	*chunks = new_chunks;
 
 	Ok(())
 }
@@ -316,7 +333,7 @@ pub fn handle_play_state(
 	});
 
 	send_login(client.clone())?;
-	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
+	sync_player_pos(client.clone(), 8.0, 3.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?; // idk why, but now you need to set y to 3 here
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
 	set_center_chunk(client.clone(), 0, 0)?;
 
@@ -325,6 +342,8 @@ pub fn handle_play_state(
 	let view_distance = client.client_info().unwrap().view_distance as i32;
 
 	send_example_chunks_in_distance(client.clone(), &mut chunks, view_distance, (0, 0))?;
+
+	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 
 	thread::spawn({
 		let client = client.clone();
