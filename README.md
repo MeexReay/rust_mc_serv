@@ -46,7 +46,9 @@ rust_mc_serv = { git = "https://github.com/GIKExe/rust_mc_serv.git" }
 let config = Arc::new(Config::default());
 let mut server = ServerContext::new(config);
 
-server.add_packet_handler(Box::new(PlayHandler)); // Добавляем дефолтную обработку режима Play
+// Добавляем дефолтную обработку режима Play
+server.add_packet_handler(Box::new(PlayHandler)); 
+server.add_packet_handler(Box::new(PlayListener));
 
 server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
 server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера

@@ -98,6 +98,8 @@ pub fn start_server(server: Arc<ServerContext>) {
 				}
 			};
 
+			trigger_event_ignore!(client, disconnect);
+
 			// Удаляем клиента из списка клиентов
 			server.clients.remove(&client.addr);
 

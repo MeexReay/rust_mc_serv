@@ -8,7 +8,7 @@ use rust_mc_serv::{
 	context::ServerContext,
 	data::text_component::TextComponent,
 	event::{Listener, PacketHandler},
-	play::PlayHandler,
+	play::{PlayHandler, PlayListener},
 	player::context::ClientContext,
 	protocol::ConnectionState,
 	start_server,
@@ -154,7 +154,9 @@ fn main() {
 	// Передается во все подключения
 	let mut server = ServerContext::new(config);
 
-	server.add_packet_handler(Box::new(PlayHandler)); // Добавляем дефолтную обработку режима Play
+	// Добавляем дефолтную обработку режима Play
+	server.add_packet_handler(Box::new(PlayHandler));
+	server.add_packet_handler(Box::new(PlayListener));
 
 	server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
 	server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера

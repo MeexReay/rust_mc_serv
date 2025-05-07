@@ -9,6 +9,7 @@ use helper::{
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 use uuid::Uuid;
 
+use crate::event::Listener;
 use crate::player::context::EntityInfo;
 use crate::{
 	ServerError, data::text_component::TextComponent, event::PacketHandler,
@@ -53,6 +54,14 @@ impl PacketHandler for PlayHandler {
 		}
 
 		Ok(())
+	}
+}
+
+pub struct PlayListener;
+
+impl Listener for PlayListener {
+	fn on_disconnect(&self, client: Arc<ClientContext>) -> Result<(), ServerError> {
+		handle_disconnect(client)
 	}
 }
 
@@ -476,5 +485,11 @@ pub fn handle_play_state(
 		ticks_alive += 1;
 	}
 
+	Ok(())
+}
+
+pub fn handle_disconnect(
+	client: Arc<ClientContext>, // Контекст клиента
+) -> Result<(), ServerError> {
 	Ok(())
 }

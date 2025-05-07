@@ -37,9 +37,27 @@ macro_rules! trigger_event {
     }};
 }
 
+/// Игнорирует результат листенеров
+#[macro_export]
+macro_rules! trigger_event_ignore {
+    ($client:ident, $event:ident $(, $arg_ty:expr)* $(,)?) => {{
+        paste::paste! {
+            for handler in $client.server.listeners(
+                |o| o.[<on_ $event _priority>]()
+            ).iter() {
+                let _ = handler.[<on_ $event>](
+                    $client.clone()
+                    $(, $arg_ty)*
+                );
+            }
+        }
+    }};
+}
+
 pub trait Listener: Sync + Send {
 	generate_handlers!(status, &mut String);
 	generate_handlers!(plugin_message, &str, &[u8]);
+	generate_handlers!(disconnect);
 }
 
 pub trait PacketHandler: Sync + Send {
