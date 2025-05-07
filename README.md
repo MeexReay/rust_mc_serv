@@ -37,7 +37,7 @@ cargo build -r
 Пример добавления в `Cargo.toml`:
 
 ```toml
-rust_mc_serv = { git = "https://github.com/GIKExe/rust_minecraft_server.git" }
+rust_mc_serv = { git = "https://github.com/GIKExe/rust_mc_serv.git" }
 ```
 
 Пример запуска сервера:
