@@ -195,6 +195,27 @@ pub fn send_example_chunks_in_distance(
 	Ok(())
 }
 
+pub fn remove_player(
+	receiver: Arc<ClientContext>,
+	player: Arc<ClientContext>,
+) -> Result<(), ServerError> {
+	let mut packet = Packet::empty(clientbound::play::PLAYER_INFO_REMOVE);
+
+	packet.write_varint(1)?;
+	packet.write_uuid(&player.entity_info().uuid)?;
+
+	receiver.write_packet(&packet)?;
+
+	let mut packet = Packet::empty(clientbound::play::REMOVE_ENTITIES);
+
+	packet.write_varint(1)?;
+	packet.write_varint(player.entity_info().entity_id)?; // Entity ID
+
+	receiver.write_packet(&packet)?;
+
+	Ok(())
+}
+
 pub fn send_player(
 	receiver: Arc<ClientContext>,
 	player: Arc<ClientContext>,
@@ -293,18 +314,18 @@ pub fn handle_play_state(
 
 	// sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 
-	send_rainbow_message(&client, format!("Your IP: {}", client.addr))?;
-	send_rainbow_message(
-		&client,
-		format!("Your brand: {}", client.client_info().unwrap().brand),
-	)?;
-	send_rainbow_message(
-		&client,
-		format!("Your locale: {}", client.client_info().unwrap().locale),
-	)?;
-	send_rainbow_message(&client, format!("Your UUID: {}", client.entity_info().uuid))?;
-	send_rainbow_message(&client, format!("Your Name: {}", &player_name))?;
-	send_rainbow_message(&client, format!("Your Entity ID: {}", entity_id))?;
+	// send_rainbow_message(&client, format!("Your IP: {}", client.addr))?;
+	// send_rainbow_message(
+	// 	&client,
+	// 	format!("Your brand: {}", client.client_info().unwrap().brand),
+	// )?;
+	// send_rainbow_message(
+	// 	&client,
+	// 	format!("Your locale: {}", client.client_info().unwrap().locale),
+	// )?;
+	// send_rainbow_message(&client, format!("Your UUID: {}", client.entity_info().uuid))?;
+	// send_rainbow_message(&client, format!("Your Name: {}", &player_name))?;
+	// send_rainbow_message(&client, format!("Your Entity ID: {}", entity_id))?;
 
 	for player in client.server.players() {
 		if client.addr == player.addr {
@@ -501,5 +522,13 @@ pub fn handle_play_state(
 pub fn handle_disconnect(
 	client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
+	for player in client.server.players() {
+		if client.addr == player.addr {
+			continue;
+		}
+
+		remove_player(player.clone(), client.clone())?;
+	}
+
 	Ok(())
 }
