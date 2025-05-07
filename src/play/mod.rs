@@ -303,7 +303,7 @@ pub fn handle_play_state(
 	send_login(client.clone())?;
 	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
-	send_game_event(client.clone(), 3, 1.0)?; // 3 - Set gamemode, 1.0 - creative
+	// send_game_event(client.clone(), 3, 1.0)?; // 3 - Set gamemode, 1.0 - creative
 	set_center_chunk(client.clone(), 0, 0)?;
 
 	let mut chunks = Vec::new();
@@ -346,6 +346,8 @@ pub fn handle_play_state(
 					serverbound::play::SET_PLAYER_ROTATION,
 					serverbound::play::CHAT_MESSAGE,
 					serverbound::play::CLICK_CONTAINER,
+					serverbound::play::CHAT_COMMAND,
+					serverbound::play::SIGNED_CHAT_COMMAND,
 				])?;
 
 				match packet.id() {
@@ -358,6 +360,17 @@ pub fn handle_play_state(
 						// i cannot read item slots now
 
 						send_rainbow_message(&client, format!("index clicked: {slot}"))?;
+					}
+					serverbound::play::CHAT_COMMAND | serverbound::play::SIGNED_CHAT_COMMAND => {
+						let command = packet.read_string()?;
+
+						if command == "gamemode creative" {
+							send_game_event(client.clone(), 3, 1.0)?; // 3 - Set gamemode
+							send_rainbow_message(&client, format!("gamemode creative installed"))?;
+						} else if command == "gamemode survival" {
+							send_game_event(client.clone(), 3, 0.0)?; // 3 - Set gamemode
+							send_rainbow_message(&client, format!("gamemode survival installed"))?;
+						}
 					}
 					serverbound::play::CHAT_MESSAGE => {
 						let message_text = packet.read_string()?;
