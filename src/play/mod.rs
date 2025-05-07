@@ -16,6 +16,7 @@ use crate::protocol::{ConnectionState, packet_id::*};
 
 pub mod config;
 pub mod helper;
+pub mod planner;
 
 pub struct PlayHandler;
 
@@ -194,13 +195,13 @@ pub fn handle_play_state(
 	});
 
 	send_login(client.clone())?;
-	sync_player_pos(client.clone(), 8.0, 3.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?; // idk why, but now you need to set y to 3 here
+	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?; // idk why, but now you need to set y to 3 here
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
 	set_center_chunk(client.clone(), 0, 0)?;
 
 	let mut chunks = Vec::new();
 
-	let view_distance = client.client_info().unwrap().view_distance as i32;
+	let view_distance = client.client_info().unwrap().view_distance as i32 / 2;
 
 	send_example_chunks_in_distance(client.clone(), &mut chunks, view_distance, (0, 0))?;
 
@@ -272,19 +273,21 @@ pub fn handle_play_state(
 				view_distance,
 				(chunk_x, chunk_z),
 			)?;
-
-			// send_system_message(
-			// 	client.clone(),
-			// 	TextComponent::rainbow(format!("Pos: {} {} {}", x as i64, y as i64, z as i64)),
-			// 	false,
-			// )?;
 		}
 
-		send_system_message(
-			client.clone(),
-			TextComponent::rainbow(format!("Ticks alive: {}", ticks_alive)),
-			true,
-		)?;
+		// text animation
+		{
+			let animation_text = format!("Ticks alive: {}         жёпа", ticks_alive);
+			let animation_index = ((ticks_alive + 40) % 300) as usize;
+			let animation_end = animation_text.len() + 20;
+
+			if animation_index < animation_end {
+				let now_length = (animation_index + 1).min(animation_text.chars().count());
+				let now_text = animation_text.chars().take(now_length).collect();
+
+				send_system_message(client.clone(), TextComponent::rainbow(now_text), true)?;
+			}
+		}
 
 		thread::sleep(Duration::from_millis(50)); // 1 tick
 		ticks_alive += 1;

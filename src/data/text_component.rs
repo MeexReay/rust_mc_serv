@@ -58,7 +58,9 @@ impl TextComponent {
 			.collect::<Vec<TextComponent>>();
 
 		let mut parent = children[0].clone();
-		parent.extra = Some(children[1..].to_vec());
+		if children.len() > 1 {
+			parent.extra = Some(children[1..].to_vec());
+		}
 		parent
 	}
 
