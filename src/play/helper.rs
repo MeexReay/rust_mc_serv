@@ -25,6 +25,19 @@ pub fn send_game_event(
 	client.write_packet(&packet)
 }
 
+pub fn send_entity_event(
+	client: Arc<ClientContext>,
+	entity_id: i32,
+	status: u8,
+) -> Result<(), ServerError> {
+	let mut packet = Packet::empty(clientbound::play::ENTITY_EVENT);
+
+	packet.write_int(entity_id)?;
+	packet.write_byte(status)?;
+
+	client.write_packet(&packet)
+}
+
 pub fn sync_player_pos(
 	client: Arc<ClientContext>,
 	x: f64,

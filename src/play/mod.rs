@@ -3,8 +3,8 @@ use std::{sync::Arc, thread, time::Duration};
 
 use config::handle_configuration_state;
 use helper::{
-	send_game_event, send_keep_alive, send_system_message, set_center_chunk, sync_player_pos,
-	unload_chunk,
+	send_entity_event, send_game_event, send_keep_alive, send_system_message, set_center_chunk,
+	sync_player_pos, unload_chunk,
 };
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 use uuid::Uuid;
@@ -304,6 +304,7 @@ pub fn handle_play_state(
 	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
 	// send_game_event(client.clone(), 3, 1.0)?; // 3 - Set gamemode, 1.0 - creative
+	send_entity_event(client.clone(), entity_id, 28)?; // 28 - give op level 4
 	set_center_chunk(client.clone(), 0, 0)?;
 
 	let mut chunks = Vec::new();
