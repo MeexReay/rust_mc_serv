@@ -239,18 +239,26 @@ pub fn get_offline_uuid(name: &str) -> Uuid {
 	Uuid::new_v3(&namespace, (&name[2..]).as_bytes())
 }
 
+pub fn send_rainbow_message(
+	client: &Arc<ClientContext>,
+	message: String,
+) -> Result<(), ServerError> {
+	send_system_message(client.clone(), TextComponent::rainbow(message), false)
+}
+
 // Отдельная функция для работы с самой игрой
 pub fn handle_play_state(
 	client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
-	client.set_entity_info(EntityInfo::new(
-		client
-			.server
-			.world
-			.entity_id_counter
-			.fetch_add(1, Ordering::SeqCst),
-		get_offline_uuid(&client.player_info().unwrap().name), // TODO: authenticated uuid
-	));
+	let player_name = client.player_info().unwrap().name;
+	let player_uuid = get_offline_uuid(&client.player_info().unwrap().name); // TODO: authenticated uuid
+	let entity_id = client
+		.server
+		.world
+		.entity_id_counter
+		.fetch_add(1, Ordering::SeqCst);
+
+	client.set_entity_info(EntityInfo::new(entity_id, player_uuid));
 
 	client.entity_info().set_position((8.0, 0.0, 8.0)); // set 8 0 8 as position
 
@@ -276,24 +284,18 @@ pub fn handle_play_state(
 
 	// sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 
-	send_system_message(
-		client.clone(),
-		TextComponent::rainbow(format!("Your Name: {}", client.player_info().unwrap().name)),
-		false,
+	send_rainbow_message(&client, format!("Your IP: {}", client.addr))?;
+	send_rainbow_message(
+		&client,
+		format!("Your brand: {}", client.client_info().unwrap().brand),
 	)?;
-	send_system_message(
-		client.clone(),
-		TextComponent::rainbow(format!(
-			"Your Entity ID: {}",
-			client.entity_info().entity_id
-		)),
-		false,
+	send_rainbow_message(
+		&client,
+		format!("Your locale: {}", client.client_info().unwrap().locale),
 	)?;
-	send_system_message(
-		client.clone(),
-		TextComponent::rainbow(format!("Your UUID: {}", client.entity_info().uuid)),
-		false,
-	)?;
+	send_rainbow_message(&client, format!("Your UUID: {}", client.entity_info().uuid))?;
+	send_rainbow_message(&client, format!("Your Name: {}", &player_name))?;
+	send_rainbow_message(&client, format!("Your Entity ID: {}", entity_id))?;
 
 	for player in client.server.players() {
 		if client.addr == player.addr {

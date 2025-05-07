@@ -1,4 +1,7 @@
-use std::{io::Read, sync::Arc};
+use std::{
+	io::{Cursor, Read},
+	sync::Arc,
+};
 
 use crate::{
 	ServerError,
@@ -129,7 +132,7 @@ pub fn handle_connection(
 				packet.get_mut().read_to_end(&mut data).unwrap();
 
 				if identifier == "minecraft:brand" {
-					break String::from_utf8_lossy(&data).to_string();
+					break Cursor::new(data).read_string()?;
 				} else {
 					trigger_event!(client, plugin_message, &identifier, &data);
 				}
