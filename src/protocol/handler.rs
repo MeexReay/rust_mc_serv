@@ -10,7 +10,7 @@ use crate::trigger_event;
 
 use super::{
 	ConnectionState,
-	id::*,
+	packet_id::*,
 	play::{handle_configuration_state, handle_play_state},
 };
 

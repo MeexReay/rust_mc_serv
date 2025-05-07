@@ -2,7 +2,7 @@
 
 # Использование:
 # 
-#   ./parse_ids.py < Packets.html > src/server/protocol/id.rs
+#   ./parse_ids.py < Packets.html > src/server/protocol/packet_id.rs
 
 import sys
 from bs4 import BeautifulSoup

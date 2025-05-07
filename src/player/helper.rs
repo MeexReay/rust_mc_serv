@@ -10,7 +10,7 @@ use crate::{
 	ServerError,
 	data::{ReadWriteNBT, text_component::TextComponent},
 	protocol::{
-		id::{clientbound, serverbound},
+		packet_id::{clientbound, serverbound},
 		*,
 	},
 };

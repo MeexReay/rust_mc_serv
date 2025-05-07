@@ -13,7 +13,7 @@ use crate::{
 	player::context::ClientContext,
 };
 
-use super::id::*;
+use super::packet_id::*;
 
 pub fn send_update_tags(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	// TODO: rewrite this hardcode bullshit
