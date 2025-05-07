@@ -314,9 +314,35 @@ pub fn handle_play_state(
 					serverbound::play::SET_PLAYER_POSITION,
 					serverbound::play::SET_PLAYER_POSITION_AND_ROTATION,
 					serverbound::play::SET_PLAYER_ROTATION,
+					serverbound::play::CHAT_MESSAGE,
 				])?;
 
 				match packet.id() {
+					serverbound::play::CHAT_MESSAGE => {
+						let message_text = packet.read_string()?;
+						// skip remaining data coz they suck
+
+						let mut message =
+							TextComponent::rainbow(format!("{} said: ", client.player_info().unwrap().name));
+
+						message.italic = Some(true);
+
+						let text_message = TextComponent::builder()
+							.color("white")
+							.text(&message_text)
+							.italic(false)
+							.build();
+
+						if let Some(extra) = &mut message.extra {
+							extra.push(text_message);
+						} else {
+							message.extra = Some(vec![text_message]);
+						}
+
+						for player in client.server.players() {
+							send_system_message(player, message.clone(), false)?;
+						}
+					}
 					serverbound::play::SET_PLAYER_POSITION => {
 						let x = packet.read_double()?;
 						let y = packet.read_double()?;
