@@ -334,6 +334,7 @@ pub fn handle_play_state(
 						let slot = packet.read_short()?;
 						let button = packet.read_byte()?;
 						let mode = packet.read_varint()?;
+						// i cannot read item slots now
 
 						send_rainbow_message(&client, format!("index clicked: {slot}"))?;
 					}
