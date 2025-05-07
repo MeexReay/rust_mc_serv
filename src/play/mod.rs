@@ -1,20 +1,21 @@
-use std::{
-	io::Cursor,
-	sync::Arc,
-	thread,
-	time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{sync::Arc, thread, time::Duration};
 
-use rust_mc_proto::{DataReader, DataWriter, Packet, read_packet};
+use config::handle_configuration_state;
+use helper::{
+	send_game_event, send_keep_alive, send_system_message, set_center_chunk, sync_player_pos,
+	unload_chunk,
+};
+use rust_mc_proto::{DataReader, DataWriter, Packet};
 
 use crate::{
-	ServerError,
-	data::{ReadWriteNBT, text_component::TextComponent},
-	event::PacketHandler,
+	ServerError, data::text_component::TextComponent, event::PacketHandler,
 	player::context::ClientContext,
 };
 
 use crate::protocol::{ConnectionState, packet_id::*};
+
+pub mod config;
+pub mod helper;
 
 pub struct PlayHandler;
 
@@ -51,50 +52,6 @@ impl PacketHandler for PlayHandler {
 	}
 }
 
-pub fn send_update_tags(client: Arc<ClientContext>) -> Result<(), ServerError> {
-	// TODO: rewrite this hardcode bullshit
-
-	client.write_packet(&Packet::from_bytes(
-		clientbound::configuration::UPDATE_TAGS,
-		include_bytes!("update-tags.bin"),
-	))
-}
-
-pub fn send_registry_data(client: Arc<ClientContext>) -> Result<(), ServerError> {
-	// TODO: rewrite this hardcode bullshit
-
-	let mut registry_data = Cursor::new(include_bytes!("registry-data.bin"));
-
-	while let Ok(mut packet) = read_packet(&mut registry_data, None) {
-		packet.set_id(clientbound::configuration::REGISTRY_DATA);
-		client.write_packet(&packet)?;
-	}
-
-	Ok(())
-}
-
-// Добавки в Configuration стейт чтобы все работало
-pub fn handle_configuration_state(
-	client: Arc<ClientContext>, // Контекст клиента
-) -> Result<(), ServerError> {
-	let mut packet = Packet::empty(clientbound::configuration::FEATURE_FLAGS);
-	packet.write_varint(1)?;
-	packet.write_string("minecraft:vanilla")?;
-	client.write_packet(&packet)?;
-
-	let mut packet = Packet::empty(clientbound::configuration::KNOWN_PACKS);
-	packet.write_varint(1)?;
-	packet.write_string("minecraft")?;
-	packet.write_string("core")?;
-	packet.write_string("1.21.5")?;
-	client.write_packet(&packet)?;
-
-	client.read_packet(&[serverbound::configuration::KNOWN_PACKS])?;
-
-	send_registry_data(client.clone())?;
-	send_update_tags(client.clone())
-}
-
 pub fn send_login(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	// Отправка пакета Login
 	let mut packet = Packet::empty(clientbound::play::LOGIN);
@@ -125,64 +82,6 @@ pub fn send_login(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	packet.write_varint(60)?; // Sea level
 
 	packet.write_boolean(false)?; // Enforces Secure Chat
-
-	client.write_packet(&packet)
-}
-
-pub fn send_game_event(
-	client: Arc<ClientContext>,
-	event: u8,
-	value: f32,
-) -> Result<(), ServerError> {
-	let mut packet = Packet::empty(clientbound::play::GAME_EVENT);
-
-	packet.write_byte(event)?;
-	packet.write_float(value)?;
-
-	client.write_packet(&packet)
-}
-
-pub fn sync_player_pos(
-	client: Arc<ClientContext>,
-	x: f64,
-	y: f64,
-	z: f64,
-	vel_x: f64,
-	vel_y: f64,
-	vel_z: f64,
-	yaw: f32,
-	pitch: f32,
-	flags: i32,
-) -> Result<(), ServerError> {
-	let timestamp = (SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.unwrap()
-		.as_millis()
-		& 0xFFFFFFFF) as i32;
-
-	let mut packet = Packet::empty(clientbound::play::SYNCHRONIZE_PLAYER_POSITION);
-
-	packet.write_varint(timestamp)?;
-	packet.write_double(x)?;
-	packet.write_double(y)?;
-	packet.write_double(z)?;
-	packet.write_double(vel_x)?;
-	packet.write_double(vel_y)?;
-	packet.write_double(vel_z)?;
-	packet.write_float(yaw)?;
-	packet.write_float(pitch)?;
-	packet.write_int(flags)?;
-
-	client.write_packet(&packet)?;
-
-	Ok(())
-}
-
-pub fn set_center_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<(), ServerError> {
-	let mut packet = Packet::empty(clientbound::play::SET_CENTER_CHUNK);
-
-	packet.write_varint(x)?;
-	packet.write_varint(z)?;
 
 	client.write_packet(&packet)
 }
@@ -253,44 +152,6 @@ pub fn send_example_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<
 	Ok(())
 }
 
-pub fn send_keep_alive(client: Arc<ClientContext>) -> Result<(), ServerError> {
-	let timestamp = SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.unwrap()
-		.as_secs() as i64;
-
-	let mut packet = Packet::empty(clientbound::play::KEEP_ALIVE);
-	packet.write_long(timestamp)?;
-	client.write_packet(&packet)?;
-
-	let mut packet = client.read_packet(&[serverbound::play::KEEP_ALIVE])?;
-	let timestamp2 = packet.read_long()?;
-	if timestamp2 != timestamp {
-		// Послать клиента нахуй
-		Err(ServerError::WrongPacket)
-	} else {
-		Ok(())
-	}
-}
-
-pub fn send_system_message(
-	client: Arc<ClientContext>,
-	message: TextComponent,
-	is_action_bar: bool,
-) -> Result<(), ServerError> {
-	let mut packet = Packet::empty(clientbound::play::SYSTEM_CHAT_MESSAGE);
-	packet.write_nbt(&message)?;
-	packet.write_boolean(is_action_bar)?;
-	client.write_packet(&packet)
-}
-
-pub fn send_unload_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<(), ServerError> {
-	let mut packet = Packet::empty(clientbound::play::UNLOAD_CHUNK);
-	packet.write_int(z)?;
-	packet.write_int(x)?;
-	client.write_packet(&packet)
-}
-
 pub fn send_example_chunks_in_distance(
 	client: Arc<ClientContext>,
 	chunks: &mut Vec<(i32, i32)>,
@@ -310,7 +171,7 @@ pub fn send_example_chunks_in_distance(
 
 	for (x, z) in chunks.iter() {
 		if !new_chunks.contains(&(*x, *z)) {
-			send_unload_chunk(client.clone(), *x, *z)?;
+			unload_chunk(client.clone(), *x, *z)?;
 		}
 	}
 
@@ -343,7 +204,7 @@ pub fn handle_play_state(
 
 	send_example_chunks_in_distance(client.clone(), &mut chunks, view_distance, (0, 0))?;
 
-	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
+	// sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 
 	thread::spawn({
 		let client = client.clone();
@@ -399,7 +260,7 @@ pub fn handle_play_state(
 
 		if ticks_alive % 20 == 0 {
 			// 1 sec timer
-			let (x, y, z) = client.position();
+			let (x, _, z) = client.position();
 
 			let (chunk_x, chunk_z) = ((x / 16.0) as i64, (z / 16.0) as i64);
 			let (chunk_x, chunk_z) = (chunk_x as i32, chunk_z as i32);
@@ -412,11 +273,11 @@ pub fn handle_play_state(
 				(chunk_x, chunk_z),
 			)?;
 
-			send_system_message(
-				client.clone(),
-				TextComponent::rainbow(format!("Pos: {} {} {}", x as i64, y as i64, z as i64)),
-				false,
-			)?;
+			// send_system_message(
+			// 	client.clone(),
+			// 	TextComponent::rainbow(format!("Pos: {} {} {}", x as i64, y as i64, z as i64)),
+			// 	false,
+			// )?;
 		}
 
 		send_system_message(
