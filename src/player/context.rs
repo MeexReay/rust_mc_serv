@@ -107,6 +107,10 @@ impl ClientContext {
 		self.player_info.read().unwrap().clone()
 	}
 
+	pub fn entity_info_opt(self: &Arc<Self>) -> Option<Arc<EntityInfo>> {
+		self.entity_info.read().unwrap().clone()
+	}
+
 	pub fn entity_info(self: &Arc<Self>) -> Arc<EntityInfo> {
 		self.entity_info.read().unwrap().clone().unwrap()
 	}

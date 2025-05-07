@@ -38,6 +38,7 @@ impl ServerContext {
 		self
 			.clients
 			.iter()
+			.filter(|o| o.entity_info_opt().is_some())
 			.find(|o| {
 				let info = o.player_info();
 				if let Some(info) = info {
@@ -53,6 +54,7 @@ impl ServerContext {
 		self
 			.clients
 			.iter()
+			.filter(|o| o.entity_info_opt().is_some())
 			.find(|o| {
 				let info = o.player_info();
 				if let Some(info) = info {
@@ -69,6 +71,7 @@ impl ServerContext {
 			.clients
 			.iter()
 			.filter(|o| o.player_info().is_some())
+			.filter(|o| o.entity_info_opt().is_some())
 			.map(|o| o.clone())
 			.collect()
 	}
