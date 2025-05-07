@@ -8,7 +8,7 @@ use rust_mc_proto::{DataReader, DataWriter, Packet};
 
 use crate::{
 	ServerError,
-	data::{ReadWriteNBT, text_component::TextComponent},
+	data::{ReadWriteNBT, component::TextComponent},
 	protocol::{
 		packet_id::{clientbound, serverbound},
 		*,

@@ -12,8 +12,7 @@ use uuid::Uuid;
 use crate::event::Listener;
 use crate::player::context::EntityInfo;
 use crate::{
-	ServerError, data::text_component::TextComponent, event::PacketHandler,
-	player::context::ClientContext,
+	ServerError, data::component::TextComponent, event::PacketHandler, player::context::ClientContext,
 };
 
 use crate::protocol::{ConnectionState, packet_id::*};
@@ -325,9 +324,19 @@ pub fn handle_play_state(
 					serverbound::play::SET_PLAYER_POSITION_AND_ROTATION,
 					serverbound::play::SET_PLAYER_ROTATION,
 					serverbound::play::CHAT_MESSAGE,
+					serverbound::play::CLICK_CONTAINER,
 				])?;
 
 				match packet.id() {
+					serverbound::play::CLICK_CONTAINER => {
+						let window_id = packet.read_varint()?;
+						let state_id = packet.read_varint()?;
+						let slot = packet.read_short()?;
+						let button = packet.read_byte()?;
+						let mode = packet.read_varint()?;
+
+						send_rainbow_message(&client, format!("index clicked: {slot}"))?;
+					}
 					serverbound::play::CHAT_MESSAGE => {
 						let message_text = packet.read_string()?;
 						// skip remaining data coz they suck

@@ -6,7 +6,7 @@ use rust_mc_serv::{
 	ServerError,
 	config::Config,
 	context::ServerContext,
-	data::text_component::TextComponent,
+	data::component::TextComponent,
 	event::{Listener, PacketHandler},
 	play::{PlayHandler, PlayListener},
 	player::context::ClientContext,
@@ -156,7 +156,7 @@ fn main() {
 
 	// Добавляем дефолтную обработку режима Play
 	server.add_packet_handler(Box::new(PlayHandler));
-	server.add_packet_handler(Box::new(PlayListener));
+	server.add_listener(Box::new(PlayListener));
 
 	server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
 	server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера

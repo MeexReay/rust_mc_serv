@@ -5,7 +5,7 @@ use rust_mc_proto::{DataReader, DataWriter, Packet};
 
 use super::ServerError;
 
-pub mod text_component;
+pub mod component;
 
 // Трейт для чтения NBT-совместимых приколов
 pub trait ReadWriteNBT<T>: DataReader + DataWriter {
