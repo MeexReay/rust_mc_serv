@@ -191,7 +191,16 @@ pub fn send_player(
 	receiver: Arc<ClientContext>,
 	player: Arc<ClientContext>,
 ) -> Result<(), ServerError> {
-	// Отправка пакета Login
+	let mut packet = Packet::empty(clientbound::play::PLAYER_INFO_UPDATE);
+
+	packet.write_byte(0x01)?; // only Add Player 
+	packet.write_varint(1)?; // players list
+	packet.write_uuid(&player.entity_info().uuid)?; // player uuid
+	packet.write_string(&player.player_info().unwrap().name)?; // player name
+	packet.write_varint(0)?; // no properties
+
+	receiver.write_packet(&packet)?;
+
 	let mut packet = Packet::empty(clientbound::play::SPAWN_ENTITY);
 
 	let (x, y, z) = player.entity_info().position();
@@ -204,15 +213,17 @@ pub fn send_player(
 	packet.write_double(x)?;
 	packet.write_double(y)?;
 	packet.write_double(z)?;
-	packet.write_byte((pitch / 360.0 * 256.0) as u8)?;
-	packet.write_byte((yaw / 360.0 * 256.0) as u8)?;
-	packet.write_byte((yaw / 360.0 * 256.0) as u8)?; // head yaw TODO: make player head yaw field
+	packet.write_signed_byte((pitch / 360.0 * 256.0) as i8)?;
+	packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
+	packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?; // head yaw TODO: make player head yaw field
 	packet.write_varint(0)?;
 	packet.write_short(vel_x as i16)?;
 	packet.write_short(vel_y as i16)?;
 	packet.write_short(vel_z as i16)?;
 
-	receiver.write_packet(&packet)
+	receiver.write_packet(&packet)?;
+
+	Ok(())
 }
 
 pub fn get_offline_uuid(name: &str) -> Uuid {
@@ -241,6 +252,8 @@ pub fn handle_play_state(
 		get_offline_uuid(&client.player_info().unwrap().name), // TODO: authenticated uuid
 	));
 
+	client.entity_info().set_position((8.0, 0.0, 8.0)); // set 8 0 8 as position
+
 	thread::spawn({
 		let client = client.clone();
 
@@ -263,7 +276,29 @@ pub fn handle_play_state(
 
 	// sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 
+	send_system_message(
+		client.clone(),
+		TextComponent::rainbow(format!("Your Name: {}", client.player_info().unwrap().name)),
+		false,
+	)?;
+	send_system_message(
+		client.clone(),
+		TextComponent::rainbow(format!(
+			"Your Entity ID: {}",
+			client.entity_info().entity_id
+		)),
+		false,
+	)?;
+	send_system_message(
+		client.clone(),
+		TextComponent::rainbow(format!("Your UUID: {}", client.entity_info().uuid)),
+		false,
+	)?;
+
 	for player in client.server.players() {
+		if client.addr == player.addr {
+			continue;
+		}
 		send_player(client.clone(), player.clone())?;
 		send_player(player.clone(), client.clone())?;
 	}
@@ -284,7 +319,23 @@ pub fn handle_play_state(
 						let x = packet.read_double()?;
 						let y = packet.read_double()?;
 						let z = packet.read_double()?;
-						let _ = packet.read_byte()?; // flags
+						let flags = packet.read_byte()?; // flags
+
+						let prev = client.entity_info().position();
+
+						for player in client.server.players() {
+							if client.addr == player.addr {
+								continue;
+							}
+
+							let mut packet = Packet::empty(clientbound::play::UPDATE_ENTITY_POSITION);
+							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_short((x * 4096.0 - prev.0 * 4096.0) as i16)?; // formula: currentX * 4096 - prevX * 4096
+							packet.write_short((y * 4096.0 - prev.1 * 4096.0) as i16)?;
+							packet.write_short((z * 4096.0 - prev.2 * 4096.0) as i16)?;
+							packet.write_boolean(flags & 0x01 != 0)?;
+							player.write_packet(&packet)?;
+						}
 
 						client.entity_info().set_position((x, y, z));
 					}
@@ -294,7 +345,31 @@ pub fn handle_play_state(
 						let z = packet.read_double()?;
 						let yaw = packet.read_float()?;
 						let pitch = packet.read_float()?;
-						let _ = packet.read_byte()?; // flags
+						let flags = packet.read_byte()?; // flags
+
+						let prev = client.entity_info().position();
+
+						for player in client.server.players() {
+							if client.addr == player.addr {
+								continue;
+							}
+
+							let mut packet =
+								Packet::empty(clientbound::play::UPDATE_ENTITY_POSITION_AND_ROTATION);
+							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_short((x * 4096.0 - prev.0 * 4096.0) as i16)?; // formula: currentX * 4096 - prevX * 4096
+							packet.write_short((y * 4096.0 - prev.1 * 4096.0) as i16)?;
+							packet.write_short((z * 4096.0 - prev.2 * 4096.0) as i16)?;
+							packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
+							packet.write_signed_byte((pitch / 360.0 * 256.0) as i8)?;
+							packet.write_boolean(flags & 0x01 != 0)?;
+							player.write_packet(&packet)?;
+
+							let mut packet = Packet::empty(clientbound::play::SET_HEAD_ROTATION);
+							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
+							player.write_packet(&packet)?;
+						}
 
 						client.entity_info().set_position((x, y, z));
 						client.entity_info().set_rotation((yaw, pitch));
@@ -302,7 +377,25 @@ pub fn handle_play_state(
 					serverbound::play::SET_PLAYER_ROTATION => {
 						let yaw = packet.read_float()?;
 						let pitch = packet.read_float()?;
-						let _ = packet.read_byte()?; // flags
+						let flags = packet.read_byte()?; // flags
+
+						for player in client.server.players() {
+							if client.addr == player.addr {
+								continue;
+							}
+
+							let mut packet = Packet::empty(clientbound::play::UPDATE_ENTITY_ROTATION);
+							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
+							packet.write_signed_byte((pitch / 360.0 * 256.0) as i8)?;
+							packet.write_boolean(flags & 0x01 != 0)?;
+							player.write_packet(&packet)?;
+
+							let mut packet = Packet::empty(clientbound::play::SET_HEAD_ROTATION);
+							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
+							player.write_packet(&packet)?;
+						}
 
 						client.entity_info().set_rotation((yaw, pitch));
 					}
