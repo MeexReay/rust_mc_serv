@@ -1,4 +1,7 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+	net::SocketAddr,
+	sync::{Arc, atomic::AtomicI32},
+};
 
 use dashmap::DashMap;
 use itertools::Itertools;
@@ -15,6 +18,7 @@ use super::{
 pub struct ServerContext {
 	pub config: Arc<Config>,
 	pub clients: DashMap<SocketAddr, Arc<ClientContext>>,
+	pub world: WorldContext,
 	listeners: Vec<Box<dyn Listener>>,
 	handlers: Vec<Box<dyn PacketHandler>>,
 }
@@ -26,6 +30,7 @@ impl ServerContext {
 			listeners: Vec::new(),
 			handlers: Vec::new(),
 			clients: DashMap::new(),
+			world: WorldContext::new(),
 		}
 	}
 
@@ -90,5 +95,17 @@ impl ServerContext {
 		F: FnMut(&&Box<dyn Listener>) -> K,
 	{
 		self.listeners.iter().sorted_by_key(sort_by).collect_vec()
+	}
+}
+
+pub struct WorldContext {
+	pub entity_id_counter: AtomicI32,
+}
+
+impl WorldContext {
+	pub fn new() -> WorldContext {
+		WorldContext {
+			entity_id_counter: AtomicI32::new(0),
+		}
 	}
 }

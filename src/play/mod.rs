@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::{sync::Arc, thread, time::Duration};
 
 use config::handle_configuration_state;
@@ -6,7 +7,9 @@ use helper::{
 	unload_chunk,
 };
 use rust_mc_proto::{DataReader, DataWriter, Packet};
+use uuid::Uuid;
 
+use crate::player::context::EntityInfo;
 use crate::{
 	ServerError, data::text_component::TextComponent, event::PacketHandler,
 	player::context::ClientContext,
@@ -57,7 +60,7 @@ pub fn send_login(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	// Отправка пакета Login
 	let mut packet = Packet::empty(clientbound::play::LOGIN);
 
-	packet.write_int(0)?; // Entity ID
+	packet.write_int(client.entity_info().entity_id)?; // Entity ID
 	packet.write_boolean(false)?; // Is hardcore
 	packet.write_varint(4)?; // Dimension Names
 	packet.write_string("minecraft:overworld")?;
@@ -96,10 +99,13 @@ pub fn send_example_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<
 	// heightmap
 
 	packet.write_varint(1)?; // heightmaps count
-	packet.write_varint(0)?; // MOTION_BLOCKING
-	packet.write_varint(256)?; // Length of the following long array (16 * 16 = 256)
-	for _ in 0..256 {
-		packet.write_long(0)?; // height - 0
+	packet.write_varint(0)?; // MOTION_BLOCKING - 0
+	// bits per entry is ceil(log2(385)) = 9 where 385 is the world height
+	// so, the length of the following array is (9 * 16 * 16) / 8 = 37
+	// ... idk how it came to that
+	packet.write_varint(37)?; // Length of the following long array 
+	for _ in 0..37 {
+		packet.write_long(0)?; // THIS WORKS ONLY BECAUSE OUR HEIGHT IS 0
 	}
 
 	// sending chunk data
@@ -117,7 +123,7 @@ pub fn send_example_chunk(client: Arc<ClientContext>, x: i32, z: i32) -> Result<
 
 		// biomes palleted container
 		chunk_data.write_byte(0)?; // Bits Per Entry, use Single valued palette format
-		chunk_data.write_varint(27)?; // biome id in the registry
+		chunk_data.write_varint(1)?; // biome id in the registry
 	}
 
 	// air chunk sections
@@ -181,10 +187,60 @@ pub fn send_example_chunks_in_distance(
 	Ok(())
 }
 
+pub fn send_player(
+	receiver: Arc<ClientContext>,
+	player: Arc<ClientContext>,
+) -> Result<(), ServerError> {
+	// Отправка пакета Login
+	let mut packet = Packet::empty(clientbound::play::SPAWN_ENTITY);
+
+	let (x, y, z) = player.entity_info().position();
+	let (yaw, pitch) = player.entity_info().rotation();
+	let (vel_x, vel_y, vel_z) = player.entity_info().velocity();
+
+	packet.write_varint(player.entity_info().entity_id)?; // Entity ID
+	packet.write_uuid(&player.entity_info().uuid)?; // Entity UUID
+	packet.write_varint(148)?; // Entity type TODO: move to const
+	packet.write_double(x)?;
+	packet.write_double(y)?;
+	packet.write_double(z)?;
+	packet.write_byte((pitch / 360.0 * 256.0) as u8)?;
+	packet.write_byte((yaw / 360.0 * 256.0) as u8)?;
+	packet.write_byte((yaw / 360.0 * 256.0) as u8)?; // head yaw TODO: make player head yaw field
+	packet.write_varint(0)?;
+	packet.write_short(vel_x as i16)?;
+	packet.write_short(vel_y as i16)?;
+	packet.write_short(vel_z as i16)?;
+
+	receiver.write_packet(&packet)
+}
+
+pub fn get_offline_uuid(name: &str) -> Uuid {
+	let mut namespaces_bytes: [u8; 16] = [0; 16];
+	for (i, byte) in format!("OfflinePlayer:{}", &name[..2])
+		.as_bytes()
+		.iter()
+		.enumerate()
+	{
+		namespaces_bytes[i] = *byte;
+	}
+	let namespace = Uuid::from_bytes(namespaces_bytes);
+	Uuid::new_v3(&namespace, (&name[2..]).as_bytes())
+}
+
 // Отдельная функция для работы с самой игрой
 pub fn handle_play_state(
 	client: Arc<ClientContext>, // Контекст клиента
 ) -> Result<(), ServerError> {
+	client.set_entity_info(EntityInfo::new(
+		client
+			.server
+			.world
+			.entity_id_counter
+			.fetch_add(1, Ordering::SeqCst),
+		get_offline_uuid(&client.player_info().unwrap().name), // TODO: authenticated uuid
+	));
+
 	thread::spawn({
 		let client = client.clone();
 
@@ -195,7 +251,7 @@ pub fn handle_play_state(
 	});
 
 	send_login(client.clone())?;
-	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?; // idk why, but now you need to set y to 3 here
+	sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 	send_game_event(client.clone(), 13, 0.0)?; // 13 - Start waiting for level chunks
 	set_center_chunk(client.clone(), 0, 0)?;
 
@@ -207,12 +263,21 @@ pub fn handle_play_state(
 
 	// sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
 
+	for player in client.server.players() {
+		send_player(client.clone(), player.clone())?;
+		send_player(player.clone(), client.clone())?;
+	}
+
 	thread::spawn({
 		let client = client.clone();
 
 		move || -> Result<(), ServerError> {
 			while client.is_alive() {
-				let mut packet = client.read_any_packet()?;
+				let mut packet = client.read_packet(&[
+					serverbound::play::SET_PLAYER_POSITION,
+					serverbound::play::SET_PLAYER_POSITION_AND_ROTATION,
+					serverbound::play::SET_PLAYER_ROTATION,
+				])?;
 
 				match packet.id() {
 					serverbound::play::SET_PLAYER_POSITION => {
@@ -221,7 +286,7 @@ pub fn handle_play_state(
 						let z = packet.read_double()?;
 						let _ = packet.read_byte()?; // flags
 
-						client.set_position((x, y, z));
+						client.entity_info().set_position((x, y, z));
 					}
 					serverbound::play::SET_PLAYER_POSITION_AND_ROTATION => {
 						let x = packet.read_double()?;
@@ -231,19 +296,17 @@ pub fn handle_play_state(
 						let pitch = packet.read_float()?;
 						let _ = packet.read_byte()?; // flags
 
-						client.set_position((x, y, z));
-						client.set_rotation((yaw, pitch));
+						client.entity_info().set_position((x, y, z));
+						client.entity_info().set_rotation((yaw, pitch));
 					}
 					serverbound::play::SET_PLAYER_ROTATION => {
 						let yaw = packet.read_float()?;
 						let pitch = packet.read_float()?;
 						let _ = packet.read_byte()?; // flags
 
-						client.set_rotation((yaw, pitch));
+						client.entity_info().set_rotation((yaw, pitch));
 					}
-					_ => {
-						client.push_packet_back(packet);
-					}
+					_ => {}
 				}
 			}
 
@@ -261,7 +324,7 @@ pub fn handle_play_state(
 
 		if ticks_alive % 20 == 0 {
 			// 1 sec timer
-			let (x, _, z) = client.position();
+			let (x, _, z) = client.entity_info().position();
 
 			let (chunk_x, chunk_z) = ((x / 16.0) as i64, (z / 16.0) as i64);
 			let (chunk_x, chunk_z) = (chunk_x as i32, chunk_z as i32);

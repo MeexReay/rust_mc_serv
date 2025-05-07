@@ -29,9 +29,7 @@ pub struct ClientContext {
 	packet_buffer: Mutex<VecDeque<Packet>>,
 	read_loop: AtomicBool,
 	is_alive: AtomicBool,
-	position: RwLock<(f64, f64, f64)>,
-	velocity: RwLock<(f64, f64, f64)>,
-	rotation: RwLock<(f32, f32)>,
+	entity_info: RwLock<Option<Arc<EntityInfo>>>,
 }
 
 // Реализуем сравнение через адрес
@@ -63,9 +61,7 @@ impl ClientContext {
 			packet_buffer: Mutex::new(VecDeque::new()),
 			read_loop: AtomicBool::new(false),
 			is_alive: AtomicBool::new(true),
-			position: RwLock::new((0.0, 0.0, 0.0)),
-			velocity: RwLock::new((0.0, 0.0, 0.0)),
-			rotation: RwLock::new((0.0, 0.0)),
+			entity_info: RwLock::new(None),
 		}
 	}
 
@@ -79,6 +75,10 @@ impl ClientContext {
 
 	pub fn set_player_info(self: &Arc<Self>, player_info: PlayerInfo) {
 		*self.player_info.write().unwrap() = Some(player_info);
+	}
+
+	pub fn set_entity_info(self: &Arc<Self>, entity_info: EntityInfo) {
+		*self.entity_info.write().unwrap() = Some(Arc::new(entity_info));
 	}
 
 	pub fn set_state(self: &Arc<Self>, state: ConnectionState) -> Result<(), ServerError> {
@@ -107,32 +107,12 @@ impl ClientContext {
 		self.player_info.read().unwrap().clone()
 	}
 
+	pub fn entity_info(self: &Arc<Self>) -> Arc<EntityInfo> {
+		self.entity_info.read().unwrap().clone().unwrap()
+	}
+
 	pub fn state(self: &Arc<Self>) -> ConnectionState {
 		self.state.read().unwrap().clone()
-	}
-
-	pub fn set_position(self: &Arc<Self>, position: (f64, f64, f64)) {
-		*self.position.write().unwrap() = position;
-	}
-
-	pub fn set_velocity(self: &Arc<Self>, velocity: (f64, f64, f64)) {
-		*self.velocity.write().unwrap() = velocity;
-	}
-
-	pub fn set_rotation(self: &Arc<Self>, rotation: (f32, f32)) {
-		*self.rotation.write().unwrap() = rotation;
-	}
-
-	pub fn position(self: &Arc<Self>) -> (f64, f64, f64) {
-		self.position.read().unwrap().clone()
-	}
-
-	pub fn velocity(self: &Arc<Self>) -> (f64, f64, f64) {
-		self.velocity.read().unwrap().clone()
-	}
-
-	pub fn rotation(self: &Arc<Self>) -> (f32, f32) {
-		self.rotation.read().unwrap().clone()
 	}
 
 	pub fn write_packet(self: &Arc<Self>, packet: &Packet) -> Result<(), ServerError> {
@@ -303,4 +283,48 @@ pub struct ClientInfo {
 pub struct PlayerInfo {
 	pub name: String,
 	pub uuid: Uuid,
+}
+
+pub struct EntityInfo {
+	pub entity_id: i32,
+	pub uuid: Uuid,
+	position: RwLock<(f64, f64, f64)>,
+	velocity: RwLock<(f64, f64, f64)>,
+	rotation: RwLock<(f32, f32)>,
+}
+
+impl EntityInfo {
+	pub fn new(entity_id: i32, uuid: Uuid) -> EntityInfo {
+		EntityInfo {
+			entity_id,
+			uuid,
+			position: RwLock::new((0.0, 0.0, 0.0)),
+			velocity: RwLock::new((0.0, 0.0, 0.0)),
+			rotation: RwLock::new((0.0, 0.0)),
+		}
+	}
+
+	pub fn set_position(self: &Arc<Self>, position: (f64, f64, f64)) {
+		*self.position.write().unwrap() = position;
+	}
+
+	pub fn set_velocity(self: &Arc<Self>, velocity: (f64, f64, f64)) {
+		*self.velocity.write().unwrap() = velocity;
+	}
+
+	pub fn set_rotation(self: &Arc<Self>, rotation: (f32, f32)) {
+		*self.rotation.write().unwrap() = rotation;
+	}
+
+	pub fn position(self: &Arc<Self>) -> (f64, f64, f64) {
+		self.position.read().unwrap().clone()
+	}
+
+	pub fn velocity(self: &Arc<Self>) -> (f64, f64, f64) {
+		self.velocity.read().unwrap().clone()
+	}
+
+	pub fn rotation(self: &Arc<Self>) -> (f32, f32) {
+		self.rotation.read().unwrap().clone()
+	}
 }
