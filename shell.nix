@@ -1,4 +1,3 @@
-
 with import <nixpkgs> { };
 
 mkShell {
@@ -11,6 +10,4 @@ mkShell {
     python3Packages.beautifulsoup4
     python3Packages.requests
   ];
-
-  NIX_ENFORCE_PURITY = true;
 }
