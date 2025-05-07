@@ -14,7 +14,7 @@ use crate::{
 	player::context::ClientContext,
 };
 
-use super::{ConnectionState, packet_id::*};
+use crate::protocol::{ConnectionState, packet_id::*};
 
 pub struct PlayHandler;
 

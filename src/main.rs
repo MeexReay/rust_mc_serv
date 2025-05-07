@@ -8,8 +8,9 @@ use rust_mc_serv::{
 	context::ServerContext,
 	data::text_component::TextComponent,
 	event::{Listener, PacketHandler},
+	play::PlayHandler,
 	player::context::ClientContext,
-	protocol::{ConnectionState, play::PlayHandler},
+	protocol::ConnectionState,
 	start_server,
 };
 

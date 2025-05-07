@@ -11,6 +11,7 @@ pub mod config;
 pub mod context;
 pub mod data;
 pub mod event;
+pub mod play;
 pub mod player;
 pub mod protocol;
 
