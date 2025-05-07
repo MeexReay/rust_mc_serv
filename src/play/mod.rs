@@ -334,7 +334,7 @@ pub fn handle_play_state(
 		}
 		send_player(client.clone(), player.clone())?;
 		send_player(player.clone(), client.clone())?;
-		send_rainbow_message(&client, format!("{} joined the game", player_name))?;
+		send_rainbow_message(&player, format!("{} joined the game", player_name))?;
 	}
 
 	thread::spawn({
@@ -550,6 +550,7 @@ pub fn handle_disconnect(
 		}
 
 		remove_player(player.clone(), client.clone())?;
+		send_rainbow_message(&player, format!("{} joined the game", player_name))?;
 	}
 
 	Ok(())
