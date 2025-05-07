@@ -9,7 +9,7 @@ use rust_mc_serv::{
 	data::text_component::TextComponent,
 	event::{Listener, PacketHandler},
 	player::context::ClientContext,
-	protocol::ConnectionState,
+	protocol::{ConnectionState, play::PlayHandler},
 	start_server,
 };
 
@@ -152,6 +152,8 @@ fn main() {
 	// Создаем контекст сервера
 	// Передается во все подключения
 	let mut server = ServerContext::new(config);
+
+	server.add_packet_handler(Box::new(PlayHandler)); // Добавляем дефолтную обработку режима Play
 
 	server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
 	server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера

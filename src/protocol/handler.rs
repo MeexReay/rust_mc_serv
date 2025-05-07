@@ -8,12 +8,9 @@ use rust_mc_proto::{DataReader, DataWriter, Packet};
 
 use crate::trigger_event;
 
-use super::{
-	ConnectionState,
-	packet_id::*,
-	play::{handle_configuration_state, handle_play_state},
-};
+use super::{ConnectionState, packet_id::*};
 
+// TODO: move brand to the config
 pub const BRAND: &str = "rust_mc_serv";
 
 pub fn handle_connection(
@@ -171,15 +168,15 @@ pub fn handle_connection(
 				},
 			)?)?;
 
-			handle_configuration_state(client.clone())?;
-
 			client.write_packet(&Packet::empty(clientbound::configuration::FINISH))?;
+
+			// На этом моменте пакет хандер ловит пакет и перед ним делает свое мракобесие
+
 			client.read_packet(&[serverbound::configuration::ACKNOWLEDGE_FINISH])?;
 
 			client.set_state(ConnectionState::Play)?; // Мы перешли в режим Play
 
-			// Дальше работаем с режимом игры
-			handle_play_state(client)?;
+			// Тут работают уже приколы из пакет хандлера
 		}
 		_ => {
 			// Тип подключения не рукопожатный

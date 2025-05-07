@@ -10,10 +10,46 @@ use rust_mc_proto::{DataReader, DataWriter, Packet, read_packet};
 use crate::{
 	ServerError,
 	data::{ReadWriteNBT, text_component::TextComponent},
+	event::PacketHandler,
 	player::context::ClientContext,
 };
 
-use super::packet_id::*;
+use super::{ConnectionState, packet_id::*};
+
+pub struct PlayHandler;
+
+impl PacketHandler for PlayHandler {
+	fn on_outcoming_packet(
+		&self,
+		client: Arc<ClientContext>,
+		packet: &mut Packet,
+		cancel: &mut bool,
+		state: ConnectionState,
+	) -> Result<(), ServerError> {
+		if !*cancel	// проверяем что пакет не отмененный, облегчаем себе задачу, ведь проверять айди наверняка сложней
+			&& state == ConnectionState::Configuration // проверяем стейт, т.к айди могут быть одинаковыми между стейтами
+			&& packet.id() == clientbound::configuration::FINISH
+		{
+			handle_configuration_state(client)?; // делаем наши грязные дела
+		}
+
+		Ok(())
+	}
+
+	fn on_state(
+		&self,
+		client: Arc<ClientContext>,
+		state: ConnectionState,
+	) -> Result<(), ServerError> {
+		if state == ConnectionState::Play {
+			// перешли в режим плей, отлично! делаем дела
+
+			handle_play_state(client)?;
+		}
+
+		Ok(())
+	}
+}
 
 pub fn send_update_tags(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	// TODO: rewrite this hardcode bullshit

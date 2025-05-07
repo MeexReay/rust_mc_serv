@@ -2,7 +2,7 @@ pub mod handler;
 pub mod packet_id;
 pub mod play;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionState {
 	Handshake,
 	Status,
