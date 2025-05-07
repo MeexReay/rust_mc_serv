@@ -550,7 +550,10 @@ pub fn handle_disconnect(
 		}
 
 		remove_player(player.clone(), client.clone())?;
-		send_rainbow_message(&player, format!("{} joined the game", player_name))?;
+		send_rainbow_message(
+			&player,
+			format!("{} left the game", client.player_info().unwrap().name),
+		)?;
 	}
 
 	Ok(())
