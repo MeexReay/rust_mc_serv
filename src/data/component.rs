@@ -37,6 +37,35 @@ impl TextComponent {
 		}
 	}
 
+	pub fn rainbow_offset(text: String, offset: i64) -> TextComponent {
+		if text.is_empty() {
+			return TextComponent::new(text);
+		}
+
+		let children = text
+			.char_indices()
+			.map(|(i, c)| {
+				let hue = (((i as i64 + offset) % text.chars().count() as i64) as f32)
+					/ (text.chars().count() as f32)
+					* 360.0;
+				let hsl = Hsl::new(hue, 1.0, 0.5);
+				let rgb: Srgb = hsl.into_color();
+				let r = (rgb.red * 255.0).round() as u8;
+				let g = (rgb.green * 255.0).round() as u8;
+				let b = (rgb.blue * 255.0).round() as u8;
+				let mut component = TextComponent::new(c.to_string());
+				component.color = Some(format!("#{:02X}{:02X}{:02X}", r, g, b));
+				component
+			})
+			.collect::<Vec<TextComponent>>();
+
+		let mut parent = children[0].clone();
+		if children.len() > 1 {
+			parent.extra = Some(children[1..].to_vec());
+		}
+		parent
+	}
+
 	pub fn rainbow(text: String) -> TextComponent {
 		if text.is_empty() {
 			return TextComponent::new(text);

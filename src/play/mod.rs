@@ -334,6 +334,7 @@ pub fn handle_play_state(
 		}
 		send_player(client.clone(), player.clone())?;
 		send_player(player.clone(), client.clone())?;
+		send_rainbow_message(&client, format!("{} joined the game", player_name))?;
 	}
 
 	thread::spawn({
@@ -353,11 +354,11 @@ pub fn handle_play_state(
 
 				match packet.id() {
 					serverbound::play::CLICK_CONTAINER => {
-						let window_id = packet.read_varint()?;
-						let state_id = packet.read_varint()?;
-						let slot = packet.read_short()?;
-						let button = packet.read_byte()?;
-						let mode = packet.read_varint()?;
+						let _ = packet.read_varint()?; // window id
+						let _ = packet.read_varint()?; // state id
+						let slot = packet.read_short()?; // slot
+						let _ = packet.read_byte()?; // button
+						let _ = packet.read_varint()?; // mode
 						// i cannot read item slots now
 
 						send_rainbow_message(&client, format!("index clicked: {slot}"))?;
@@ -514,15 +515,22 @@ pub fn handle_play_state(
 
 		// text animation
 		{
-			let animation_text = format!("Ticks alive: {}         жёпа", ticks_alive);
-			let animation_index = ((ticks_alive + 40) % 300) as usize;
-			let animation_end = animation_text.len() + 20;
+			if ticks_alive > 40 {
+				let animation_text = format!(
+					"жёпа .-.-.-.-.-.- Ticks passed during the aliveness of the connection: {} ticks (1/20 of second) -.-.-.-.-.-. жёпа",
+					ticks_alive
+				);
 
-			if animation_index < animation_end {
-				let now_length = (animation_index + 1).min(animation_text.chars().count());
+				let now_length = ((ticks_alive - 40 + 1) as usize).min(animation_text.chars().count());
 				let now_text = animation_text.chars().take(now_length).collect();
 
-				send_system_message(client.clone(), TextComponent::rainbow(now_text), true)?;
+				let mut text = TextComponent::rainbow_offset(now_text, -(ticks_alive as i64));
+
+				text.bold = Some(true);
+				text.italic = Some(true);
+				text.underlined = Some(true);
+
+				send_system_message(client.clone(), text, true)?;
 			}
 		}
 
