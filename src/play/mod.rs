@@ -3,8 +3,8 @@ use std::{sync::Arc, thread, time::Duration};
 
 use config::handle_configuration_state;
 use helper::{
-	send_entity_event, send_game_event, send_keep_alive, send_system_message, set_center_chunk,
-	sync_player_pos, unload_chunk,
+	play_sound, send_entity_event, send_game_event, send_keep_alive, send_system_message,
+	set_center_chunk, sync_player_pos, unload_chunk,
 };
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 use uuid::Uuid;
@@ -335,6 +335,7 @@ pub fn handle_play_state(
 		send_player(client.clone(), player.clone())?;
 		send_player(player.clone(), client.clone())?;
 		send_rainbow_message(&player, format!("{} joined the game", player_name))?;
+		play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
 	}
 
 	thread::spawn({
@@ -350,6 +351,7 @@ pub fn handle_play_state(
 					serverbound::play::CLICK_CONTAINER,
 					serverbound::play::CHAT_COMMAND,
 					serverbound::play::SIGNED_CHAT_COMMAND,
+					serverbound::play::PLAYER_COMMAND,
 				])?;
 
 				match packet.id() {
@@ -363,15 +365,31 @@ pub fn handle_play_state(
 
 						send_rainbow_message(&client, format!("index clicked: {slot}"))?;
 					}
+					serverbound::play::PLAYER_COMMAND => {
+						let _ = packet.read_varint()?; // entity id
+						let action = packet.read_varint()?; // action id
+						let _ = packet.read_varint()?; // jump boost on horse
+
+						if action == 0 {
+							// press sneak key
+							for player in client.server.players() {
+								play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
+							}
+						} else if action == 1 {
+							// release sneak key
+						}
+					}
 					serverbound::play::CHAT_COMMAND | serverbound::play::SIGNED_CHAT_COMMAND => {
 						let command = packet.read_string()?;
 
 						if command == "gamemode creative" {
 							send_game_event(client.clone(), 3, 1.0)?; // 3 - Set gamemode
 							send_rainbow_message(&client, format!("gamemode creative installed"))?;
+							play_sound(client.clone(), format!("minecraft:block.bell.use"))?;
 						} else if command == "gamemode survival" {
 							send_game_event(client.clone(), 3, 0.0)?; // 3 - Set gamemode
 							send_rainbow_message(&client, format!("gamemode survival installed"))?;
+							play_sound(client.clone(), format!("minecraft:block.bell.use"))?;
 						}
 					}
 					serverbound::play::CHAT_MESSAGE => {
@@ -394,7 +412,8 @@ pub fn handle_play_state(
 						}
 
 						for player in client.server.players() {
-							send_system_message(player, message.clone(), false)?;
+							send_system_message(player.clone(), message.clone(), false)?;
+							play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
 						}
 					}
 					serverbound::play::SET_PLAYER_POSITION => {
@@ -554,6 +573,7 @@ pub fn handle_disconnect(
 			&player,
 			format!("{} left the game", client.player_info().unwrap().name),
 		)?;
+		play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
 	}
 
 	Ok(())

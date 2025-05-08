@@ -38,6 +38,44 @@ pub fn send_entity_event(
 	client.write_packet(&packet)
 }
 
+pub fn send_entity_animation(
+	receiver: Arc<ClientContext>,
+	entity_id: i32,
+	animation: u8,
+) -> Result<(), ServerError> {
+	let mut packet = Packet::empty(clientbound::play::ENTITY_ANIMATION);
+
+	packet.write_varint(entity_id)?;
+	packet.write_byte(animation)?;
+
+	receiver.write_packet(&packet)?;
+
+	Ok(())
+}
+
+pub fn play_sound(receiver: Arc<ClientContext>, sound: String) -> Result<(), ServerError> {
+	let mut packet = Packet::empty(clientbound::play::ENTITY_SOUND_EFFECT);
+
+	let timestamp = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.unwrap()
+		.as_micros() as i64;
+
+	packet.write_varint(0)?;
+	packet.write_string(&sound)?;
+	packet.write_boolean(false)?; // is fixed range
+	// packet.write_float(0.0)?; // fixed range
+	packet.write_varint(receiver.entity_info().entity_id)?;
+	packet.write_varint(0)?; // sound category (0 - master)
+	packet.write_float(1.0)?; // volume
+	packet.write_float(1.0)?; // pitch
+	packet.write_long(timestamp)?; // seed
+
+	receiver.write_packet(&packet)?;
+
+	Ok(())
+}
+
 pub fn sync_player_pos(
 	client: Arc<ClientContext>,
 	x: f64,
