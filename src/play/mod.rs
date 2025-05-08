@@ -390,6 +390,20 @@ pub fn handle_play_state(
 							send_game_event(client.clone(), 3, 0.0)?; // 3 - Set gamemode
 							send_rainbow_message(&client, format!("gamemode survival installed"))?;
 							play_sound(client.clone(), format!("minecraft:block.bell.use"))?;
+						} else if command == "help" {
+							send_rainbow_message(&client, format!("/gamemode creative"))?;
+							send_rainbow_message(&client, format!("/gamemode survival"))?;
+							send_rainbow_message(&client, format!("/help"))?;
+							send_rainbow_message(&client, format!("/reset"))?;
+						} else if command == "reset" {
+							sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
+							send_rainbow_message(&client, format!("reseteed"))?;
+						} else {
+							send_rainbow_message(&client, format!("use command /help to see my commands bro"))?;
+							for _ in 0..10 {
+								play_sound(client.clone(), format!("minecraft:block.bell.use"))?;
+								thread::sleep(Duration::from_millis(50));
+							}
 						}
 					}
 					serverbound::play::CHAT_MESSAGE => {
@@ -534,22 +548,15 @@ pub fn handle_play_state(
 
 		// text animation
 		{
-			if ticks_alive > 40 {
-				let animation_text = format!(
-					"жёпа .-.-.-.-.-.- Ticks passed during the aliveness of the connection: {} ticks (1/20 of second) -.-.-.-.-.-. жёпа",
-					ticks_alive
-				);
+			let animation_text = format!("Ticks alive: {}         жёпа", ticks_alive);
+			let animation_index = ((ticks_alive + 40) % 300) as usize;
+			let animation_end = animation_text.len() + 20;
 
-				let now_length = ((ticks_alive - 40 + 1) as usize).min(animation_text.chars().count());
+			if animation_index < animation_end {
+				let now_length = (animation_index + 1).min(animation_text.chars().count());
 				let now_text = animation_text.chars().take(now_length).collect();
 
-				let mut text = TextComponent::rainbow_offset(now_text, -(ticks_alive as i64));
-
-				text.bold = Some(true);
-				text.italic = Some(true);
-				text.underlined = Some(true);
-
-				send_system_message(client.clone(), text, true)?;
+				send_system_message(client.clone(), TextComponent::rainbow(now_text), true)?;
 			}
 		}
 
