@@ -335,7 +335,6 @@ pub fn handle_play_state(
 		send_player(client.clone(), player.clone())?;
 		send_player(player.clone(), client.clone())?;
 		send_rainbow_message(&player, format!("{} joined the game", player_name))?;
-		play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
 	}
 
 	thread::spawn({
@@ -385,11 +384,9 @@ pub fn handle_play_state(
 						if command == "gamemode creative" {
 							send_game_event(client.clone(), 3, 1.0)?; // 3 - Set gamemode
 							send_rainbow_message(&client, format!("gamemode creative installed"))?;
-							play_sound(client.clone(), format!("minecraft:block.bell.use"))?;
 						} else if command == "gamemode survival" {
 							send_game_event(client.clone(), 3, 0.0)?; // 3 - Set gamemode
 							send_rainbow_message(&client, format!("gamemode survival installed"))?;
-							play_sound(client.clone(), format!("minecraft:block.bell.use"))?;
 						} else if command == "help" {
 							send_rainbow_message(&client, format!("/gamemode creative"))?;
 							send_rainbow_message(&client, format!("/gamemode survival"))?;
@@ -400,10 +397,6 @@ pub fn handle_play_state(
 							send_rainbow_message(&client, format!("reseteed"))?;
 						} else {
 							send_rainbow_message(&client, format!("use command /help to see my commands bro"))?;
-							for _ in 0..10 {
-								play_sound(client.clone(), format!("minecraft:block.bell.use"))?;
-								thread::sleep(Duration::from_millis(50));
-							}
 						}
 					}
 					serverbound::play::CHAT_MESSAGE => {
@@ -427,7 +420,6 @@ pub fn handle_play_state(
 
 						for player in client.server.players() {
 							send_system_message(player.clone(), message.clone(), false)?;
-							play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
 						}
 					}
 					serverbound::play::SET_PLAYER_POSITION => {
@@ -580,7 +572,6 @@ pub fn handle_disconnect(
 			&player,
 			format!("{} left the game", client.player_info().unwrap().name),
 		)?;
-		play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
 	}
 
 	Ok(())
