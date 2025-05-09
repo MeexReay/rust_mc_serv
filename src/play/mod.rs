@@ -6,7 +6,6 @@ use helper::{
 	send_entity_animation, send_entity_event, send_game_event, send_keep_alive, send_system_message,
 	set_center_chunk, sync_player_pos, unload_chunk,
 };
-use log::debug;
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 use uuid::Uuid;
 
