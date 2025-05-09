@@ -1,46 +1,50 @@
 # rust_mc_serv
 
-Простой майнкрафт сервер на расте. Поддерживаемая версия: 1.21.5 (PVN 770)
+Simple Minecraft server (java edition) written in pure rust. 
+ 
+### Supported versions
 
-## Как запустить
+- 1.21.5 (PVN 770)
 
-Перед тем как запускать, вам нужно получить бинарник, это можно сделать следующими способами:
+## How to run
 
-### Скачать из релиза
+First of all, you need to get a binary, that can be done using these methods:
 
-На данный момент проект находится в разработке, так что релизов нет
+### Download from release
 
-Если хотите собрать последнюю версию сервера вручную, обратитесь к следующему способу.
+At the moment, there are no releases as the project is in developement
 
-### Собрать самим
+If you want to build the latest binary on your own, please refer to the following method.
 
-Для того чтобы собрать проект самим, вам нужно:
+### Build it yourself
 
-1. Скачать и установить [Rust](https://www.rust-lang.org/)
-2. Скачать исходный код проекта (через zip или `git clone`)
-3. Открыть терминал в папке проекта и выполнить следующие команды:
+To build the project by yourself, you should to:
 
-Для запуска:
+1. Download and install [Rust](https://www.rust-lang.org/)
+2. Download source code of the project (from zip or `git clone`)
+3. Open terminal in the project folder and run the following commands:
+
+To run:
 ```bash
 cargo run
 ```
 
-Для сборки (готовый бинарник будет в `target/release`):
+To build (the built binary will be in `target/release`):
 ```bash
 cargo build -r
 ```
 
-### Использовать как библиотеку
+## Use as a library
 
-Вы можете использовать проект как библиотеку для своих серверов
+You can use the project as a library in your servers
 
-Пример добавления в `Cargo.toml`:
+Example of adding in `Cargo.toml`:
 
 ```toml
-rust_mc_serv = { git = "https://github.com/GIKExe/rust_mc_serv.git" }
+rust_mc_serv = { git = "https://github.com/MeexReay/rust_mc_serv.git" }
 ```
 
-Пример запуска сервера:
+Example of running a server:
 
 ```rust
 let config = Arc::new(Config::default());
@@ -56,14 +60,13 @@ server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем
 start_server(Arc::new(server));
 ```
 
-## Конфигурация
+## Configuration
 
-По умолчанию, конфиг будет создан в файле `config.toml` в рабочей директории. Чтобы изменить этот путь, укажите его в первом аргументе к серверу, пример: `./rust_mc_serv /path/to/config.toml`
+By default, the config will be created in `config.toml` in the working directory. To change this path, specify it as the first argument to the server, example: `./rust_mc_serv /path/to/config.toml`
 
-## Лицензия
+## Contributing
 
-Этот проект полностью лицензирован под лицензией WTFPL. Он абсолютно бесплатен и не имеет ограничений в использовании.
+If you would like to contribute to the project, feel free to fork the repository and submit a pull request.
 
-## Содействие
-
-Если вы хотите помочь проекту, не стесняйтесь отправлять пулл реквесты!
+## License
+This project is licensed under the WTFPL License
