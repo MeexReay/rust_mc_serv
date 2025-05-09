@@ -29,7 +29,7 @@ pub struct ClientContext {
 	packet_buffer: Mutex<VecDeque<Packet>>,
 	read_loop: AtomicBool,
 	is_alive: AtomicBool,
-	entity_info: RwLock<Option<Arc<EntityInfo>>>,
+	entity_info: RwLock<Option<Arc<PlayerEntityInfo>>>,
 }
 
 // Реализуем сравнение через адрес
@@ -77,7 +77,7 @@ impl ClientContext {
 		*self.player_info.write().unwrap() = Some(player_info);
 	}
 
-	pub fn set_entity_info(self: &Arc<Self>, entity_info: EntityInfo) {
+	pub fn set_entity_info(self: &Arc<Self>, entity_info: PlayerEntityInfo) {
 		*self.entity_info.write().unwrap() = Some(Arc::new(entity_info));
 	}
 
@@ -107,12 +107,8 @@ impl ClientContext {
 		self.player_info.read().unwrap().clone()
 	}
 
-	pub fn entity_info_opt(self: &Arc<Self>) -> Option<Arc<EntityInfo>> {
+	pub fn entity_info(self: &Arc<Self>) -> Option<Arc<PlayerEntityInfo>> {
 		self.entity_info.read().unwrap().clone()
-	}
-
-	pub fn entity_info(self: &Arc<Self>) -> Arc<EntityInfo> {
-		self.entity_info.read().unwrap().clone().unwrap()
 	}
 
 	pub fn state(self: &Arc<Self>) -> ConnectionState {
@@ -289,7 +285,7 @@ pub struct PlayerInfo {
 	pub uuid: Uuid,
 }
 
-pub struct EntityInfo {
+pub struct PlayerEntityInfo {
 	pub entity_id: i32,
 	pub uuid: Uuid,
 	position: RwLock<(f64, f64, f64)>,
@@ -297,9 +293,9 @@ pub struct EntityInfo {
 	rotation: RwLock<(f32, f32)>,
 }
 
-impl EntityInfo {
-	pub fn new(entity_id: i32, uuid: Uuid) -> EntityInfo {
-		EntityInfo {
+impl PlayerEntityInfo {
+	pub fn new(entity_id: i32, uuid: Uuid) -> PlayerEntityInfo {
+		PlayerEntityInfo {
 			entity_id,
 			uuid,
 			position: RwLock::new((0.0, 0.0, 0.0)),

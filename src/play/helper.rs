@@ -53,7 +53,13 @@ pub fn send_entity_animation(
 	Ok(())
 }
 
-pub fn play_sound(receiver: Arc<ClientContext>, sound: String) -> Result<(), ServerError> {
+pub fn play_global_sound(
+	receiver: Arc<ClientContext>,
+	sound: String,
+	volume: f32,
+	pitch: f32,
+	category: i32,
+) -> Result<(), ServerError> {
 	let mut packet = Packet::empty(clientbound::play::ENTITY_SOUND_EFFECT);
 
 	let timestamp = SystemTime::now()
@@ -65,10 +71,10 @@ pub fn play_sound(receiver: Arc<ClientContext>, sound: String) -> Result<(), Ser
 	packet.write_string(&sound)?;
 	packet.write_boolean(false)?; // is fixed range
 	// packet.write_float(0.0)?; // fixed range
-	packet.write_varint(receiver.entity_info().entity_id)?;
-	packet.write_varint(0)?; // sound category (0 - master)
-	packet.write_float(1.0)?; // volume
-	packet.write_float(1.0)?; // pitch
+	packet.write_varint(receiver.entity_info().unwrap().entity_id)?;
+	packet.write_varint(category)?; // sound category (0 - master)
+	packet.write_float(volume)?; // volume
+	packet.write_float(pitch)?; // pitch
 	packet.write_long(timestamp)?; // seed
 
 	receiver.write_packet(&packet)?;

@@ -3,14 +3,15 @@ use std::{sync::Arc, thread, time::Duration};
 
 use config::handle_configuration_state;
 use helper::{
-	play_sound, send_entity_event, send_game_event, send_keep_alive, send_system_message,
+	send_entity_animation, send_entity_event, send_game_event, send_keep_alive, send_system_message,
 	set_center_chunk, sync_player_pos, unload_chunk,
 };
+use log::debug;
 use rust_mc_proto::{DataReader, DataWriter, Packet};
 use uuid::Uuid;
 
 use crate::event::Listener;
-use crate::player::context::EntityInfo;
+use crate::player::context::PlayerEntityInfo;
 use crate::{
 	ServerError, data::component::TextComponent, event::PacketHandler, player::context::ClientContext,
 };
@@ -68,7 +69,7 @@ pub fn send_login(client: Arc<ClientContext>) -> Result<(), ServerError> {
 	// Отправка пакета Login
 	let mut packet = Packet::empty(clientbound::play::LOGIN);
 
-	packet.write_int(client.entity_info().entity_id)?; // Entity ID
+	packet.write_int(client.entity_info().unwrap().entity_id)?; // Entity ID
 	packet.write_boolean(false)?; // Is hardcore
 	packet.write_varint(4)?; // Dimension Names
 	packet.write_string("minecraft:overworld")?;
@@ -202,14 +203,14 @@ pub fn remove_player(
 	let mut packet = Packet::empty(clientbound::play::PLAYER_INFO_REMOVE);
 
 	packet.write_varint(1)?;
-	packet.write_uuid(&player.entity_info().uuid)?;
+	packet.write_uuid(&player.entity_info().unwrap().uuid)?;
 
 	receiver.write_packet(&packet)?;
 
 	let mut packet = Packet::empty(clientbound::play::REMOVE_ENTITIES);
 
 	packet.write_varint(1)?;
-	packet.write_varint(player.entity_info().entity_id)?; // Entity ID
+	packet.write_varint(player.entity_info().unwrap().entity_id)?; // Entity ID
 
 	receiver.write_packet(&packet)?;
 
@@ -224,7 +225,7 @@ pub fn send_player(
 
 	packet.write_byte(0x01)?; // only Add Player 
 	packet.write_varint(1)?; // players list
-	packet.write_uuid(&player.entity_info().uuid)?; // player uuid
+	packet.write_uuid(&player.entity_info().unwrap().uuid)?; // player uuid
 	packet.write_string(&player.player_info().unwrap().name)?; // player name
 	packet.write_varint(0)?; // no properties
 
@@ -232,12 +233,12 @@ pub fn send_player(
 
 	let mut packet = Packet::empty(clientbound::play::SPAWN_ENTITY);
 
-	let (x, y, z) = player.entity_info().position();
-	let (yaw, pitch) = player.entity_info().rotation();
-	let (vel_x, vel_y, vel_z) = player.entity_info().velocity();
+	let (x, y, z) = player.entity_info().unwrap().position();
+	let (yaw, pitch) = player.entity_info().unwrap().rotation();
+	let (vel_x, vel_y, vel_z) = player.entity_info().unwrap().velocity();
 
-	packet.write_varint(player.entity_info().entity_id)?; // Entity ID
-	packet.write_uuid(&player.entity_info().uuid)?; // Entity UUID
+	packet.write_varint(player.entity_info().unwrap().entity_id)?; // Entity ID
+	packet.write_uuid(&player.entity_info().unwrap().uuid)?; // Entity UUID
 	packet.write_varint(148)?; // Entity type TODO: move to const
 	packet.write_double(x)?;
 	packet.write_double(y)?;
@@ -287,9 +288,9 @@ pub fn handle_play_state(
 		.entity_id_counter
 		.fetch_add(1, Ordering::SeqCst);
 
-	client.set_entity_info(EntityInfo::new(entity_id, player_uuid));
+	client.set_entity_info(PlayerEntityInfo::new(entity_id, player_uuid));
 
-	client.entity_info().set_position((8.0, 0.0, 8.0)); // set 8 0 8 as position
+	client.entity_info().unwrap().set_position((8.0, 0.0, 8.0)); // set 8 0 8 as position
 
 	thread::spawn({
 		let client = client.clone();
@@ -351,6 +352,7 @@ pub fn handle_play_state(
 					serverbound::play::CHAT_COMMAND,
 					serverbound::play::SIGNED_CHAT_COMMAND,
 					serverbound::play::PLAYER_COMMAND,
+					serverbound::play::SWING_ARM,
 				])?;
 
 				match packet.id() {
@@ -364,6 +366,25 @@ pub fn handle_play_state(
 
 						send_rainbow_message(&client, format!("index clicked: {slot}"))?;
 					}
+					serverbound::play::SWING_ARM => {
+						let hand = packet.read_varint()?; // hand (0 - main, 1 - off)
+
+						send_rainbow_message(&client, format!("hand swinged: {hand}"))?;
+
+						let animation = match hand {
+							0 => 0, // 0 - mainhand swing animatiom
+							1 => 3, // 3 - offhand swing animatiom
+							_ => continue,
+						};
+
+						for player in client.server.players() {
+							if client.addr == player.addr {
+								continue;
+							}
+
+							send_entity_animation(player, client.entity_info().unwrap().entity_id, animation)?;
+						}
+					}
 					serverbound::play::PLAYER_COMMAND => {
 						let _ = packet.read_varint()?; // entity id
 						let action = packet.read_varint()?; // action id
@@ -371,9 +392,6 @@ pub fn handle_play_state(
 
 						if action == 0 {
 							// press sneak key
-							for player in client.server.players() {
-								play_sound(player.clone(), format!("minecraft:block.bell.use"))?;
-							}
 						} else if action == 1 {
 							// release sneak key
 						}
@@ -387,16 +405,9 @@ pub fn handle_play_state(
 						} else if command == "gamemode survival" {
 							send_game_event(client.clone(), 3, 0.0)?; // 3 - Set gamemode
 							send_rainbow_message(&client, format!("gamemode survival installed"))?;
-						} else if command == "help" {
-							send_rainbow_message(&client, format!("/gamemode creative"))?;
-							send_rainbow_message(&client, format!("/gamemode survival"))?;
-							send_rainbow_message(&client, format!("/help"))?;
-							send_rainbow_message(&client, format!("/reset"))?;
-						} else if command == "reset" {
+						} else if command == "kill" {
 							sync_player_pos(client.clone(), 8.0, 0.0, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0)?;
-							send_rainbow_message(&client, format!("reseteed"))?;
-						} else {
-							send_rainbow_message(&client, format!("use command /help to see my commands bro"))?;
+							send_rainbow_message(&client, format!("killed"))?;
 						}
 					}
 					serverbound::play::CHAT_MESSAGE => {
@@ -428,7 +439,7 @@ pub fn handle_play_state(
 						let z = packet.read_double()?;
 						let flags = packet.read_byte()?; // flags
 
-						let prev = client.entity_info().position();
+						let prev = client.entity_info().unwrap().position();
 
 						for player in client.server.players() {
 							if client.addr == player.addr {
@@ -436,7 +447,7 @@ pub fn handle_play_state(
 							}
 
 							let mut packet = Packet::empty(clientbound::play::UPDATE_ENTITY_POSITION);
-							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_varint(client.entity_info().unwrap().entity_id)?;
 							packet.write_short((x * 4096.0 - prev.0 * 4096.0) as i16)?; // formula: currentX * 4096 - prevX * 4096
 							packet.write_short((y * 4096.0 - prev.1 * 4096.0) as i16)?;
 							packet.write_short((z * 4096.0 - prev.2 * 4096.0) as i16)?;
@@ -444,7 +455,7 @@ pub fn handle_play_state(
 							player.write_packet(&packet)?;
 						}
 
-						client.entity_info().set_position((x, y, z));
+						client.entity_info().unwrap().set_position((x, y, z));
 					}
 					serverbound::play::SET_PLAYER_POSITION_AND_ROTATION => {
 						let x = packet.read_double()?;
@@ -454,7 +465,7 @@ pub fn handle_play_state(
 						let pitch = packet.read_float()?;
 						let flags = packet.read_byte()?; // flags
 
-						let prev = client.entity_info().position();
+						let prev = client.entity_info().unwrap().position();
 
 						for player in client.server.players() {
 							if client.addr == player.addr {
@@ -463,7 +474,7 @@ pub fn handle_play_state(
 
 							let mut packet =
 								Packet::empty(clientbound::play::UPDATE_ENTITY_POSITION_AND_ROTATION);
-							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_varint(client.entity_info().unwrap().entity_id)?;
 							packet.write_short((x * 4096.0 - prev.0 * 4096.0) as i16)?; // formula: currentX * 4096 - prevX * 4096
 							packet.write_short((y * 4096.0 - prev.1 * 4096.0) as i16)?;
 							packet.write_short((z * 4096.0 - prev.2 * 4096.0) as i16)?;
@@ -473,13 +484,13 @@ pub fn handle_play_state(
 							player.write_packet(&packet)?;
 
 							let mut packet = Packet::empty(clientbound::play::SET_HEAD_ROTATION);
-							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_varint(client.entity_info().unwrap().entity_id)?;
 							packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
 							player.write_packet(&packet)?;
 						}
 
-						client.entity_info().set_position((x, y, z));
-						client.entity_info().set_rotation((yaw, pitch));
+						client.entity_info().unwrap().set_position((x, y, z));
+						client.entity_info().unwrap().set_rotation((yaw, pitch));
 					}
 					serverbound::play::SET_PLAYER_ROTATION => {
 						let yaw = packet.read_float()?;
@@ -492,19 +503,19 @@ pub fn handle_play_state(
 							}
 
 							let mut packet = Packet::empty(clientbound::play::UPDATE_ENTITY_ROTATION);
-							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_varint(client.entity_info().unwrap().entity_id)?;
 							packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
 							packet.write_signed_byte((pitch / 360.0 * 256.0) as i8)?;
 							packet.write_boolean(flags & 0x01 != 0)?;
 							player.write_packet(&packet)?;
 
 							let mut packet = Packet::empty(clientbound::play::SET_HEAD_ROTATION);
-							packet.write_varint(client.entity_info().entity_id)?;
+							packet.write_varint(client.entity_info().unwrap().entity_id)?;
 							packet.write_signed_byte((yaw / 360.0 * 256.0) as i8)?;
 							player.write_packet(&packet)?;
 						}
 
-						client.entity_info().set_rotation((yaw, pitch));
+						client.entity_info().unwrap().set_rotation((yaw, pitch));
 					}
 					_ => {}
 				}
@@ -524,7 +535,7 @@ pub fn handle_play_state(
 
 		if ticks_alive % 20 == 0 {
 			// 1 sec timer
-			let (x, _, z) = client.entity_info().position();
+			let (x, _, z) = client.entity_info().unwrap().position();
 
 			let (chunk_x, chunk_z) = ((x / 16.0) as i64, (z / 16.0) as i64);
 			let (chunk_x, chunk_z) = (chunk_x as i32, chunk_z as i32);
