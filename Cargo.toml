@@ -19,3 +19,5 @@ uuid = { version = "1.16.0", features = ["v3"] }
 dashmap = "6.1.0"
 paste = "1.0.15"
 ignore-result = "0.2.0"
+enum_index = "0.2.0"
+enum_index_derive = "0.2.0"

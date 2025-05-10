@@ -7,6 +7,7 @@ use super::ServerError;
 
 pub mod component;
 pub mod slot;
+pub mod sound;
 
 // Трейт для чтения NBT-совместимых приколов
 pub trait ReadWriteNBT<T>: DataReader + DataWriter {
@@ -49,4 +50,17 @@ impl ReadWritePosition for Packet {
 	fn write_position(&mut self, x: i64, y: i64, z: i64) -> Result<(), ServerError> {
 		Ok(self.write_long(((x & 0x3FFFFFF) << 38) | ((z & 0x3FFFFFF) << 12) | (y & 0xFFF))?)
 	}
+}
+
+#[derive(Clone)]
+pub enum IDSet {
+	Tag(String),
+	Ids(Vec<u32>),
+}
+
+#[derive(Clone)]
+pub struct Property {
+	name: String,
+	value: String,
+	signature: Option<String>,
 }
