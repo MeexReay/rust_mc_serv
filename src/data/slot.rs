@@ -42,16 +42,16 @@ pub struct PaintingVariant;
 
 #[derive(Clone)]
 pub struct HiveBee {
-	entity_data: DynNBT,
-	ticks_in_hive: i32,
-	min_ticks_in_hive: i32,
+	pub entity_data: DynNBT,
+	pub ticks_in_hive: i32,
+	pub min_ticks_in_hive: i32,
 }
 
 #[derive(Clone)]
 pub struct BannerLayer {
-	pattern_type: i32,
-	asset_id: Option<String>,
-	translation_key: Option<String>,
+	pub pattern_type: i32,
+	pub asset_id: Option<String>,
+	pub translation_key: Option<String>,
 	/// Can be one of the following:
 	/// - 0 - White
 	/// - 1 - Orange
@@ -69,19 +69,19 @@ pub struct BannerLayer {
 	/// - 13 - Green
 	/// - 14 - Red
 	/// - 15 - Black
-	color: u8,
+	pub color: u8,
 }
 
 #[derive(Clone)]
 pub struct AttributeModifier {
-	attribute_id: u64,
-	modifier_id: String,
-	value: f64,
+	pub attribute_id: u64,
+	pub modifier_id: String,
+	pub value: f64,
 	/// The operation to be applied upon the value. Can be one of the following:
 	/// - 0 - Add
 	/// - 1 - Multiply base
 	/// - 2 - Multiply total
-	operation: u8,
+	pub operation: u8,
 	/// The item slot placement required for the modifier to have effect.
 	/// Can be one of the following:
 	/// - 0 - Any
@@ -94,24 +94,24 @@ pub struct AttributeModifier {
 	/// - 7 - Head
 	/// - 8 - Armor
 	/// - 9 - Body
-	slot: u8,
+	pub slot: u8,
 }
 
 #[derive(Clone)]
 pub struct ToolRule {
-	blocks: IDSet,
-	has_speed: bool,
-	speed: Option<f32>,
-	has_correct_drop_for_blocks: bool,
-	correct_drop_for_blocks: Option<bool>,
+	pub blocks: IDSet,
+	pub has_speed: bool,
+	pub speed: Option<f32>,
+	pub has_correct_drop_for_blocks: bool,
+	pub correct_drop_for_blocks: Option<bool>,
 }
 
 #[derive(Clone)]
 pub struct DamageReduction {
-	horizontal_blocking_angle: f32,
-	damage_kind: Option<IDSet>,
-	base: f32,
-	factor: f32,
+	pub horizontal_blocking_angle: f32,
+	pub damage_kind: Option<IDSet>,
+	pub base: f32,
+	pub factor: f32,
 }
 
 /// https://minecraft.wiki/w/Java_Edition_protocol/Slot_data#Structured_components
@@ -445,7 +445,7 @@ pub trait ReadWriteSlotComponent: DataReader + DataWriter {
 
 impl ReadWriteSlotComponent for Packet {
 	fn read_slot_component(&mut self) -> Result<SlotComponent, ServerError> {
-		let id = self.read_u16_varint()?;
+		let _ = self.read_u16_varint()?; // id
 
 		todo!()
 	}

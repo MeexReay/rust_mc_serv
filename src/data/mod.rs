@@ -60,7 +60,7 @@ pub enum IDSet {
 
 #[derive(Clone)]
 pub struct Property {
-	name: String,
-	value: String,
-	signature: Option<String>,
+	pub name: String,
+	pub value: String,
+	pub signature: Option<String>,
 }
