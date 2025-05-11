@@ -41,7 +41,7 @@ You can use the project as a library in your servers
 Example of adding in `Cargo.toml`:
 
 ```toml
-rust_mc_serv = { git = "https://github.com/MeexReay/rust_mc_serv.git" }
+rust_mc_serv = { git = "https://git.meex.lol/MeexReay/rust_mc_serv.git" }
 ```
 
 Example of running a server:
