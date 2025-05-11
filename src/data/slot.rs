@@ -11,13 +11,42 @@ use super::{IdOr, IdSet, Property, component::TextComponent, sound::SoundEvent};
 pub const SLOT_COMPONENT_LENGTH: u16 = 96;
 
 #[derive(Clone)]
-pub struct JukeboxSong;
+pub struct JukeboxSong {
+	pub sound: IdOr<SoundEvent>,
+	pub description: TextComponent,
+	/// The duration the songs should play for, in seconds.
+	pub duration: f32,
+	/// The output strength given by a comparator. Between 0 and 15.
+	pub output: i32,
+}
 
 #[derive(Clone)]
-pub struct ChickenVariant;
+pub enum JukeboxPlayable {
+	ByName(String),
+	ById(IdOr<JukeboxSong>),
+}
 
 #[derive(Clone)]
-pub struct PaintingVariant;
+pub enum ChickenVariant {
+	ByName(String),
+	ById(u32),
+}
+
+#[derive(Clone)]
+pub struct PaintingVariant {
+	pub width: i32,
+	pub height: i32,
+	/// The texture for the painting. The Notchian client uses the corresponding asset located at textures/painting.
+	pub asset_id: String,
+	pub title: Option<TextComponent>,
+	pub author: Option<TextComponent>,
+}
+
+#[derive(Clone)]
+pub enum ProvidesTrimMaterial {
+	ByName(String),
+	ById(IdOr<TrimMaterial>),
+}
 
 #[derive(Clone)]
 pub enum BlockPredicatePropertyMatch {
@@ -344,16 +373,16 @@ pub enum StructuredComponent {
 		resolved: bool,
 	},
 	/// Armor's trim pattern and color
-	Trim,
+	Trim(IdOr<TrimMaterial>, IdOr<TrimPattern>),
 	DebugStrickState(DynNBT),
 	EntityData(DynNBT),
 	BucketEntityData(DynNBT),
 	BlockEntityData(DynNBT),
-	Instrument(Instrument),
-	ProvidesTrimMaterial(TrimMaterial),
+	Instrument(IdOr<Instrument>),
+	ProvidesTrimMaterial(ProvidesTrimMaterial),
 	/// Between 0 and 4.
 	OminousBottleAmplifier(u8),
-	JukeboxPlayable(JukeboxSong),
+	JukeboxPlayable(JukeboxPlayable),
 	/// A pattern identifier like #minecraft:pattern_item/globe
 	ProvidesBannerPatterns(String),
 	Recipes(DynNBT),
