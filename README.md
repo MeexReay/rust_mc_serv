@@ -50,12 +50,12 @@ Example of running a server:
 let config = Arc::new(Config::default());
 let mut server = ServerContext::new(config);
 
-// Добавляем дефолтную обработку режима Play
+// Adding default Play mode handling
 server.add_packet_handler(Box::new(PlayHandler)); 
 server.add_listener(Box::new(PlayListener));
 
-server.add_listener(Box::new(ExampleListener)); // Добавляем пример листенера
-server.add_packet_handler(Box::new(ExamplePacketHandler)); // Добавляем пример пакет хандлера
+server.add_listener(Box::new(ExampleListener)); // Adding listener example
+server.add_packet_handler(Box::new(ExamplePacketHandler)); // Adding packet handler example
 
 start_server(Arc::new(server));
 ```
