@@ -6,39 +6,122 @@ use uuid::Uuid;
 
 use crate::ServerError;
 
-use super::{IDSet, Property, component::TextComponent, sound::SoundEvent};
+use super::{IdOr, IdSet, Property, component::TextComponent, sound::SoundEvent};
 
 pub const SLOT_COMPONENT_LENGTH: u16 = 96;
 
 #[derive(Clone)]
-pub struct BlockPredicate;
-
-#[derive(Clone)]
-pub struct ConsumeEffect;
-
-#[derive(Clone)]
-pub struct PotionEffect;
-
-#[derive(Clone)]
-pub struct TrimPattern;
-
-#[derive(Clone)]
-pub struct Instrument;
-
-#[derive(Clone)]
-pub struct TrimMaterial;
-
-#[derive(Clone)]
 pub struct JukeboxSong;
-
-#[derive(Clone)]
-pub struct FireworkExplosion;
 
 #[derive(Clone)]
 pub struct ChickenVariant;
 
 #[derive(Clone)]
 pub struct PaintingVariant;
+
+#[derive(Clone)]
+pub enum BlockPredicatePropertyMatch {
+	Exact(String),
+	Range(String, String),
+}
+
+#[derive(Clone)]
+pub struct BlockPredicateExactDataMatcher {
+	/// ID of the data component as listed in the table of data component types above.
+	pub component_index: usize,
+	pub value: StructuredComponent,
+}
+
+#[derive(Clone)]
+pub struct BlockPredicatePartialDataMatcher {
+	/// 0: damage, 1: enchantments, 2: stored_enchantments, 3: potion_contents, 4: custom_data, 5: container, 6: bundle_contents, 7: firework_explosion, 8: fireworks, 9: writable_book_content, 10: written_book_content, 11: attribute_modifiers, 12: trim, 13: jukebox_playable.
+	pub type_id: u8,
+	/// https://minecraft.wiki/w/Data_component_predicate
+	pub predicate: DynNBT,
+}
+
+#[derive(Clone)]
+pub struct BlockPredicateProperty {
+	pub name: String,
+	pub matches: BlockPredicatePropertyMatch,
+}
+
+#[derive(Clone)]
+pub struct BlockPredicate {
+	pub blocks: Option<IdSet>,
+	pub properties: Option<Vec<BlockPredicateProperty>>,
+	pub nbt: Option<DynNBT>,
+	pub exact_matchers: Vec<BlockPredicateExactDataMatcher>,
+	pub partial_matchers: Vec<BlockPredicatePartialDataMatcher>,
+}
+
+#[derive(Clone)]
+pub struct Instrument {
+	pub sound: IdOr<SoundEvent>,
+	pub sound_range: f32,
+	pub range: f32,
+	pub description: TextComponent,
+}
+
+#[derive(Clone)]
+pub enum ConsumeEffect {
+	/// Effects, Probability
+	ApplyEffects(Vec<PotionEffect>, f32),
+	RemoveEffects(IdSet),
+	ClearAllEffects,
+	/// Diameter
+	TeleportRandomly(f32),
+	PlaySound(SoundEvent),
+}
+
+#[derive(Clone)]
+pub struct TrimMaterial {
+	pub suffix: String,
+	/// Key - Armor Material Type Identifier
+	/// Value - Overriden Asset Name
+	pub overrides: Vec<(String, String)>,
+	pub description: TextComponent,
+}
+
+#[derive(Clone)]
+pub struct TrimPattern {
+	pub asset_name: String,
+	pub template_item: i32,
+	pub description: TextComponent,
+	pub decal: bool,
+}
+
+#[derive(Clone)]
+pub struct PotionEffectDetail {
+	pub amplifier: i32,
+	/// -1 for infinite.
+	pub duration: i32,
+	pub ambient: bool,
+	pub show_particles: bool,
+	pub show_icon: bool,
+	pub hidden_effect: Option<Box<PotionEffectDetail>>,
+}
+
+#[derive(Clone)]
+pub struct PotionEffect {
+	pub type_id: u32,
+	pub detail: PotionEffectDetail,
+}
+
+#[derive(Clone)]
+pub struct FireworkExplosion {
+	/// Can be one of the following:
+	/// - 0 - Small ball
+	/// - 1 - Large ball
+	/// - 2 - Star
+	/// - 3 - Creeper
+	/// - 4 - Burst
+	pub shape: u8,
+	pub colors: Vec<i32>,
+	pub fade_colors: Vec<i32>,
+	pub has_trail: bool,
+	pub has_twinkle: bool,
+}
 
 #[derive(Clone)]
 pub struct HiveBee {
@@ -99,7 +182,7 @@ pub struct AttributeModifier {
 
 #[derive(Clone)]
 pub struct ToolRule {
-	pub blocks: IDSet,
+	pub blocks: IdSet,
 	pub has_speed: bool,
 	pub speed: Option<f32>,
 	pub has_correct_drop_for_blocks: bool,
@@ -109,14 +192,14 @@ pub struct ToolRule {
 #[derive(Clone)]
 pub struct DamageReduction {
 	pub horizontal_blocking_angle: f32,
-	pub damage_kind: Option<IDSet>,
+	pub damage_kind: Option<IdSet>,
 	pub base: f32,
 	pub factor: f32,
 }
 
 /// https://minecraft.wiki/w/Java_Edition_protocol/Slot_data#Structured_components
 #[derive(Clone, EnumIndex)]
-pub enum SlotComponent {
+pub enum StructuredComponent {
 	CustomData(DynNBT),
 	/// 1 - 99
 	MaxStackSize(i32),
@@ -167,7 +250,7 @@ pub enum SlotComponent {
 	Consumable {
 		consume_seconds: f32,
 		animation: u8,
-		sound: SoundEvent,
+		sound: IdOr<SoundEvent>,
 		has_particles: bool,
 		effects: Vec<ConsumeEffect>,
 	},
@@ -192,16 +275,16 @@ pub enum SlotComponent {
 	Enchantable(i32),
 	Equippable {
 		slot: u8,
-		equip_sound: SoundEvent,
+		equip_sound: IdOr<SoundEvent>,
 		model: Option<String>,
 		camera_overlay: Option<String>,
-		allowed_entities: Option<IDSet>,
+		allowed_entities: Option<IdSet>,
 		dispensable: bool,
 		swappable: bool,
 		damage_on_hurt: bool,
 	},
 	/// Items that can be combined with this item in an anvil to repair it.
-	Repairable(IDSet),
+	Repairable(IdSet),
 	/// Makes the item function like elytra.
 	Glider,
 	TooltipStyle(String),
@@ -215,8 +298,8 @@ pub enum SlotComponent {
 		item_damage_base: f32,
 		item_damage_factor: f32,
 		bypassed_by: Option<String>,
-		block_sound: Option<SoundEvent>,
-		disable_sound: Option<SoundEvent>,
+		block_sound: Option<IdOr<SoundEvent>>,
+		disable_sound: Option<IdOr<SoundEvent>>,
 	},
 	/// The enchantments stored in this enchanted book.
 	/// Key: The ID of the enchantment in the enchantment registry. \
@@ -318,7 +401,7 @@ pub enum SlotComponent {
 	Bees(Vec<HiveBee>),
 	Lock(String),
 	ContainerLoot(DynNBT),
-	BreakSound(SoundEvent),
+	BreakSound(IdOr<SoundEvent>),
 	VillagerVariant(u64),
 	WolfVariant(u64),
 	WolfSoundVariant(u64),
@@ -439,17 +522,17 @@ pub enum SlotComponent {
 }
 
 pub trait ReadWriteSlotComponent: DataReader + DataWriter {
-	fn read_slot_component(&mut self) -> Result<SlotComponent, ServerError>;
-	fn write_slot_component(&mut self, val: &SlotComponent) -> Result<(), ServerError>;
+	fn read_slot_component(&mut self) -> Result<StructuredComponent, ServerError>;
+	fn write_slot_component(&mut self, val: &StructuredComponent) -> Result<(), ServerError>;
 }
 
 impl ReadWriteSlotComponent for Packet {
-	fn read_slot_component(&mut self) -> Result<SlotComponent, ServerError> {
+	fn read_slot_component(&mut self) -> Result<StructuredComponent, ServerError> {
 		let _ = self.read_u16_varint()?; // id
 
 		todo!()
 	}
-	fn write_slot_component(&mut self, val: &SlotComponent) -> Result<(), ServerError> {
+	fn write_slot_component(&mut self, val: &StructuredComponent) -> Result<(), ServerError> {
 		self.write_usize_varint(val.enum_index())?;
 
 		todo!()
@@ -460,7 +543,7 @@ impl ReadWriteSlotComponent for Packet {
 pub struct Slot {
 	pub id: i32,
 	pub amount: i32,
-	pub components: Vec<SlotComponent>,
+	pub components: Vec<StructuredComponent>,
 }
 
 pub trait ReadWriteSlot: DataReader + DataWriter {

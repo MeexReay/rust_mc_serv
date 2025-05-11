@@ -53,7 +53,13 @@ impl ReadWritePosition for Packet {
 }
 
 #[derive(Clone)]
-pub enum IDSet {
+pub enum IdOr<T> {
+	Id(i32),
+	Or(T),
+}
+
+#[derive(Clone)]
+pub enum IdSet {
 	Tag(String),
 	Ids(Vec<u32>),
 }
