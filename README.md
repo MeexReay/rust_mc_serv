@@ -1,5 +1,5 @@
 > [!WARNING]
-> Migrated to [Gitea](https://git.meex.lol/MeexReay/rust_mc_serv)
+> Migrated to my selfhost [Gitea](https://git.meex.lol/MeexReay/rust_mc_serv)
 
 # rust_mc_serv
 
