@@ -1,3 +1,6 @@
+> [!WARNING]
+> Migrated to [Gitea](https://git.meex.lol/MeexReay/rust_mc_serv)
+
 # rust_mc_serv
 
 Simple Minecraft server (java edition) written in pure rust. 
